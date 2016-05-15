@@ -31,3 +31,7 @@ for file in $files; do
 	echo "Creating symlink to $file in home directory."
 	ln -s $dir/$file ~/.$file
 done
+
+# Run vundle plugininstall automatically
+vim +PluginInstall +qall
+echo 'You need to finish install of youcompleteme manually'
