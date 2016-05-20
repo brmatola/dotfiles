@@ -1,8 +1,11 @@
 source ~/dotfiles/antigen/antigen.zsh
 
+# Prioritize executables in macports directory
+export PATH=/opt/local/bin:/opt/local/sbin:$PATH
+
 # Setup Powerline
 powerline-daemon -q
-source /usr/local/lib/python3.5/site-packages/powerline/bindings/zsh/powerline.zsh
+source /opt/local/Library/Frameworks/Python.framework/Versions/3.5/lib/python3.5/site-packages/powerline/bindings/zsh/powerline.zsh
 
 # Set default editor to vim
 export EDITOR='vim'
@@ -34,8 +37,8 @@ alias ev='vim ~/.vimrc'
 alias et='vim ~/.tmux.conf'
 alias ez='vim ~/.zshrc'
 
-# Alias for homebrew vim (python3 based)
-alias vim='/usr/local/Cellar/vim/7.4.1817/bin/vim'
+# Path to global python (3.5) installation
+globalpyinstall=/opt/local/Library/Frameworks/Python.framework/Versions/3.5
 
 # Load the theme
 antigen theme https://github.com/caiogondim/bullet-train-oh-my-zsh-theme bullet-train

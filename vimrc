@@ -1,6 +1,7 @@
 " My personal Vim configuration
 " Brad Matola brmatola@gmail.com 
 
+
 " Colors {{{
 colorscheme badwolf	" awesome colorscheme
 syntax enable		" enable syntax processing
@@ -22,9 +23,11 @@ set wildmenu		" visual autocompletes for command menu
 set lazyredraw		" redraw only when we need to
 set ttyfast         " take advantage of modern terminal data io
 set showmatch		" highlight matching [{()}]
-set statusline=%F%m%r%h%w\ [TYPE=%Y\ %{&ff}]\
-                        \ [%l/%L\ (%p%%)
+python3 from powerline.vim import setup as powerline_setup
+python3 powerline_setup()
+python3 del powerline_setup
 set laststatus=2
+set showtabline=2 " Always display the tabline, even if there is only one tab
 set backspace=indent,eol,start
 " }}}
 
@@ -45,12 +48,6 @@ set foldmethod=indent	" fold based on indent level
 " Leader Shortcuts {{{
 let mapleader=","	" leader is comma
 inoremap jk <esc>	" escape is bad
-nnoremap <leader>u :GundoToggle<CR> " use gundo undo for graphical rep of tree
-nnoremap <leader>ev :vsp $MYVIMRC<CR> " edit vimrc
-nnoremap <leader>ez :vsp ~/.zshrc<CR> " edit zshrc
-nnoremap <leader>sv :source $MYVIMRC<CR> " source vimrc
-nnoremap <leader>s :mksession<CR>	" save session
-nnoremap <leader>a :Ag			" open ag.vim (source code search)
 " }}}
 
 " Movement {{{
@@ -63,14 +60,8 @@ nnoremap <leader>k <C-w>k
 nnoremap <leader>l <C-w>l
 " }}}
 
-" CtrlP settings {{{
-let g:ctrlp_match_window = 'bottom,order:ttb'
-let g:ctrlp_switch_buffer = 0
-let g:ctrlp_working_path_mode = 0
-let g:ctrlp_user_command = 'ag %s -l --nocolor --hidden -g ""'
-" }}}
 
-" Launch Config {{{
+" Pathogen calls {{{
 call pathogen#infect()		" use pathogen
 call pathogen#helptags()
 " }}}
@@ -105,7 +96,7 @@ augroup END
 " Python specific settings {{{
 au FileType py set autoindent
 au FileType py set textwidth=79 " PEP-8
-let g:ycm_python_binary_path = '/usr/local/bin/python3' " Autocomplete for python3
+let g:ycm_python_binary_path = '/opt/local/bin/python' " Autocomplete for python3
 " }}}
 
 " Vundle Plugins {{{
@@ -117,10 +108,18 @@ call vundle#begin()
 
 Plugin 'christoomey/vim-tmux-navigator'
 Plugin 'Valloric/YouCompleteMe'
+Plugin 'rizatti/dash.vim'
 
 call vundle#end()
 filetype plugin indent on
 " }}}
+
+" syntastic settings
+let g:syntastic_always_populate_loc_list = 1
+let g:syntastic_auto_loc_list = 1
+let g:syntastic_check_on_open = 1
+let g:syntastic_check_on_wq = 0
+let g:syntastic_python_checkers = ['flake8']
 
 " Custom Functions {{{
 function! ToggleNumber()	" toggle between number and relativenumber
@@ -142,6 +141,8 @@ function! <SID>StripTrailingWhitespaces()	"self explanatory
 	call cursor(l, c)
 endfunction
 " }}}
+
+set noshowmode " removes default mode text (-- INSERT --)
 
 " Organization
 set modelines=1		" look for modeline on final line
