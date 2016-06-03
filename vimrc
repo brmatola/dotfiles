@@ -1,7 +1,7 @@
 " My personal Vim configuration
 " Brad Matola brmatola@gmail.com 
 
-
+set shiftwidth=4
 " Colors {{{
 colorscheme badwolf	" awesome colorscheme
 syntax enable		" enable syntax processing
@@ -42,7 +42,7 @@ set foldenable		" enable folding
 set foldlevelstart=10	" open most folds by default
 set foldnestmax=10	" 10 nested fold max
 nnoremap <space> za	" space open/closes folds
-set foldmethod=indent	" fold based on indent level
+set foldmethod=syntax	" fold based on indent level
 " }}}
 
 " Leader Shortcuts {{{
@@ -108,11 +108,13 @@ call vundle#begin()
 
 Plugin 'christoomey/vim-tmux-navigator'
 Plugin 'Valloric/YouCompleteMe'
-Plugin 'rizatti/dash.vim'
 
 call vundle#end()
 filetype plugin indent on
 " }}}
+
+" youcompleteme settings
+let g:ycm_global_ycm_extra_conf = '~/.vim/bundle/YouCompleteMe/third_party/ycmd/cpp/ycm/.ycm_extra_conf.py'
 
 " syntastic settings
 let g:syntastic_always_populate_loc_list = 1
@@ -120,6 +122,8 @@ let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
 let g:syntastic_python_checkers = ['flake8']
+let g:syntastic_cpp_compiler = 'clang++'
+let g:syntastic_cpp_compiler_options = ' -std=c++11 -stdlib=libc++'
 
 " Custom Functions {{{
 function! ToggleNumber()	" toggle between number and relativenumber
