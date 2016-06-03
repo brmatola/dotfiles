@@ -1,6 +1,6 @@
-ource ~/dotfiles/antigen/antigen.zsh
+source ~/dotfiles/antigen/antigen.zsh
 
-Prioritize executables in macports directory
+# Prioritize executables in macports directory
 export PATH=/opt/local/bin:/opt/local/sbin:$PATH
 export PATH=$PATH:.
 
