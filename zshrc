@@ -1,6 +1,6 @@
-source ~/dotfiles/antigen/antigen.zsh
+ource ~/dotfiles/antigen/antigen.zsh
 
-# Prioritize executables in macports directory
+Prioritize executables in macports directory
 export PATH=/opt/local/bin:/opt/local/sbin:$PATH
 export PATH=$PATH:.
 
@@ -52,5 +52,5 @@ antigen apply
 function mkcd
 {
     dir="$*"
-    mkdir -p "$dir" && cd "$dir";
-}
+        mkdir -p "$dir" && cd "$dir";
+        }
