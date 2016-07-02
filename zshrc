@@ -2,7 +2,12 @@ source ~/dotfiles/antigen/antigen.zsh
 
 # Prioritize executables in macports directory
 export PATH=/opt/local/bin:/opt/local/sbin:$PATH
-export PATH=$PATH:.
+export PATH=~/.rbenv/bin:~/.pyenv/bin:$PATH:.
+
+
+# Use rbenv and pyenv
+eval "$(rbenv init -)"
+eval "$(pyenv init -)"
 
 # Setup Powerline
 powerline-daemon -q
@@ -38,6 +43,14 @@ alias ev='vim ~/.vimrc'
 alias et='vim ~/.tmux.conf'
 alias ez='vim ~/.zshrc'
 
+# quick directory movement
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+# Alias for simple compiling
+alias c++='c++ -std=c++11'
+
 # Path to global python (3.5) installation
 globalpyinstall=/opt/local/Library/Frameworks/Python.framework/Versions/3.5
 
@@ -53,4 +66,4 @@ function mkcd
 {
     dir="$*"
         mkdir -p "$dir" && cd "$dir";
-        }
+}

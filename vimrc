@@ -73,6 +73,11 @@ if exists('$TMUX')
     let &t_EI = "\<Esc>]50;CursorShape=0\x7"
 endif
 
+" vim-latex config (see
+" http://vim-latex.sourceforge.net/documentation/latex-suite/recommended-settings.html)
+set grepprg=grep\ -nH\ $*
+let g:tex_flavor='latex'
+
 " Autogroups
 augroup configgroup
     autocmd!

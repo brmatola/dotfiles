@@ -32,6 +32,9 @@ for file in $files; do
 	ln -s $dir/$file ~/.$file
 done
 
-# Run vundle plugininstall automatically
-vim +PluginInstall +qall
-echo 'You need to finish install of youcompleteme manually'
+unamestr='uname'
+if [[ "$unamestr" == 'Darwin' ]]; then
+    ~/dotfiles/vim/bundle/YouCompleteMe/install.py --clang-completer
+else echo 'You need to finish install of youcompleteme manually'
+fi
+
