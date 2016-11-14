@@ -1,20 +1,17 @@
 source ~/dotfiles/antigen/antigen.zsh
 
-# Prioritize executables in macports directory
-export PATH=/opt/local/bin:/opt/local/sbin:$PATH
-export PATH=~/.rbenv/bin:~/.pyenv/bin:$PATH:.
-
-
 # Use rbenv and pyenv
-eval "$(rbenv init -)"
 eval "$(pyenv init -)"
 
 # Setup Powerline
 powerline-daemon -q
 source /opt/local/Library/Frameworks/Python.framework/Versions/3.5/lib/python3.5/site-packages/powerline/bindings/zsh/powerline.zsh
 
-# Set default editor to vim
-export EDITOR='vim'
+# Set default editor to nvim
+export EDITOR='nvim'
+export PATH=$PATH:/usr/local/dart-sdk/bin:/Users/brmatola/.pub-cache/bin
+export PATH=$PATH:/Users/brmatola/.cargo/bin
+export EVENT_NOKQUEUE=1
 
 # Load the oh-my-zsh library
 antigen use oh-my-zsh
@@ -31,6 +28,9 @@ antigen bundle autopep8
 # Syntax Highlighting Bundle
 antigen bundle zsh-users/zsh-syntax-highlighting
 
+# Alias for neovim
+alias nv='nvim'
+
 # Aliases for Tmux
 alias tmux='tmux -2'
 alias ta='tmux attach -t'
@@ -39,9 +39,10 @@ alias tls='tmux ls'
 alias tkill='tmux kill-session -t'
 
 # Aliases for editing configs
-alias ev='vim ~/.vimrc'
-alias et='vim ~/.tmux.conf'
-alias ez='vim ~/.zshrc'
+alias ev='nv ~/.vimrc'
+alias et='nv ~/.tmux.conf'
+alias ez='nv ~/.zshrc'
+alias en='nv ~/.config/nvim/init.vim'
 
 # quick directory movement
 alias ..='cd ..'
@@ -51,6 +52,10 @@ alias ....='cd ../../..'
 # Alias for simple compiling
 alias c++='c++ -std=c++11'
 
+# Other aliases
+alias cl='clear'
+alias rmrf='rm -rf'
+
 # Path to global python (3.5) installation
 globalpyinstall=/opt/local/Library/Frameworks/Python.framework/Versions/3.5
 
@@ -59,8 +64,6 @@ antigen theme https://github.com/caiogondim/bullet-train-oh-my-zsh-theme bullet-
 
 # Tell antigen that you're done
 antigen apply
-
-# Use vim mode
 
 function mkcd
 {

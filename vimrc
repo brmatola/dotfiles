@@ -78,6 +78,12 @@ endif
 set grepprg=grep\ -nH\ $*
 let g:tex_flavor='latex'
 
+" Typescript YouCompleteMe Config
+if !exists("g:ycm_semantic_triggers")
+    let g:ycm_semantic_triggers = {}
+endif
+let g:ycm_semantic_triggers['typescript'] = ['.']
+
 " Autogroups
 augroup configgroup
     autocmd!
