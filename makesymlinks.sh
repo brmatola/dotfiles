@@ -4,6 +4,9 @@
 # This script symlinks from the home directory to any dotfiles in ~/dotfiles
 #######################
 
+# Download all submodules
+git submodule update --init --recursive
+
 
 ######### Variables
 
