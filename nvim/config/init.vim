@@ -1,10 +1,10 @@
 " Python Interpreter paths
-let g:python_host_prog  = '~/.pyenv/versions/neovim2/bin/python'
-let g:python3_host_prog = '~/.pyenv/versions/neovim3/bin/python'
+let g:python2_host_prog  = $HOME . '/.pyenv/versions/neovim2/bin/python2.7'
+let g:python3_host_prog = $HOME . '/.pyenv/versions/neovim3/bin/python3'
 
 
 " Declare plugins
-call plug#begin('~/.config/nvim/plugged')
+call plug#begin($HOME . '/.config/nvim/plugged')
   Plug 'bling/vim-airline'
   Plug 'morhetz/gruvbox'
   Plug 'neomake/neomake'
@@ -17,6 +17,7 @@ call plug#begin('~/.config/nvim/plugged')
     Plug 'Shougo/context_filetype.vim'
     Plug 'Shougo/neopairs.vim'
   " Deoplete Sources
+    Plug 'zchee/deoplete-clang'
     Plug 'zchee/deoplete-jedi'
     Plug 'Shougo/neco-vim'
     Plug 'sebastianmarkow/deoplete-rust'
