@@ -1,22 +1,38 @@
 # File Structure
 
-## Doom Config Organization
+## Dotfiles Organization
+
+All Doom Emacs configuration lives in the dotfiles repo and is symlinked during installation.
 
 ```
-~/.config/doom/                    # Symlinked from dotfiles/emacs/doom/
-├── init.el                        # Doom module declarations (no changes needed)
-├── packages.el                    # Extra packages (none needed for this)
-├── config.el                      # Loads our modules
-└── modules/
-    ├── defaults.el                # UI preferences, theme, fonts
-    ├── keybindings.el             # Non-Claude custom bindings
-    └── claude/
-        ├── claude.el              # Entry point
-        ├── claude-worktree.el     # Git worktree operations
-        ├── claude-workspace.el    # Doom workspace management
-        ├── claude-monitor.el      # Attention detection
-        ├── claude-dashboard.el    # Dashboard UI
-        └── claude-cleanup.el      # Cleanup workflow
+~/dotfiles/
+├── install.sh                     # Symlinks dotfiles, installs Claude CLI
+├── Brewfile                       # Homebrew packages (includes node for npm)
+├── emacs/
+│   └── doom/                      # Symlinked to ~/.config/doom/
+│       ├── init.el                # Doom module declarations (no changes needed)
+│       ├── packages.el            # Extra packages (none needed for this)
+│       ├── config.el              # Loads our modules
+│       └── modules/
+│           └── claude/
+│               ├── claude.el              # Entry point
+│               ├── claude-worktree.el     # Git worktree operations
+│               ├── claude-workspace.el    # Doom workspace management
+│               ├── claude-monitor.el      # Attention detection
+│               ├── claude-dashboard.el    # Dashboard UI
+│               └── claude-cleanup.el      # Cleanup workflow
+└── claude/
+    └── CLAUDE.md                  # Documents this workflow (symlinked to ~/.claude/)
+```
+
+## Symlink Setup (via install.sh)
+
+```bash
+# Doom config (entire directory)
+~/dotfiles/emacs/doom/ -> ~/.config/doom/
+
+# Claude instructions
+~/dotfiles/claude/CLAUDE.md -> ~/.claude/CLAUDE.md
 ```
 
 ## Module Responsibilities
@@ -157,7 +173,7 @@ Doom workspace and vterm session management.
 ;;; claude-workspace.el ends here
 ```
 
-### claude-monitor.el (~100 lines)
+### claude-monitor.el (~150 lines)
 Attention detection and modeline.
 
 ```elisp
@@ -186,6 +202,15 @@ Attention detection and modeline.
 (defvar-local claude--last-content-hash nil)
 (defvar-local claude--needs-attention nil)
 
+;; Faces
+(defface claude-attention-face
+  '((t :foreground "#ff6c6b" :weight bold))
+  "Face for Claude attention indicator.")
+
+(defface claude-idle-face
+  '((t :foreground "#5B6268"))
+  "Face for Claude idle indicator.")
+
 (defun claude-monitor-start ()
   "Start attention monitoring.")
 
@@ -199,13 +224,21 @@ Attention detection and modeline.
   "Check all Claude buffers for attention.")
 
 (defun claude--check-buffer-attention (buffer)
-  "Check if BUFFER needs attention.")
+  "Check if BUFFER needs attention.
+Uses `vterm--filter-buffer-substring' to handle fake newlines.")
 
 (defun claude--any-needs-attention-p ()
   "Return t if any Claude buffer needs attention.")
 
-(defun claude-modeline-segment ()
-  "Modeline segment showing Claude status.")
+(defun claude-jump-to-attention ()
+  "Jump to first Claude buffer needing attention.")
+
+;; Modeline segment (via doom-modeline)
+(after! doom-modeline
+  (doom-modeline-def-segment claude-status
+    "Display Claude session status."
+    ;; Implementation in design/monitor.md
+    ))
 
 (provide 'claude-monitor)
 ;;; claude-monitor.el ends here
@@ -297,11 +330,19 @@ Cleanup workflow and status display.
 ```elisp
 ;;; config.el -*- lexical-binding: t; -*-
 
-;; Load custom modules
-(add-to-list 'load-path (expand-file-name "modules" doom-user-dir))
-(add-to-list 'load-path (expand-file-name "modules/claude" doom-user-dir))
+;; Add custom modules to load path (Doom-idiomatic)
+(add-load-path! "modules/claude")
 
-(load! "modules/defaults")
-(load! "modules/keybindings")
-(load! "modules/claude/claude")
+;; Load Claude workflow module AFTER doom-modeline is available
+;; This ensures modeline segment can be defined properly
+(after! doom-modeline
+  (load! "modules/claude/claude")
+
+  ;; Set up custom modeline with Claude status
+  (doom-modeline-def-modeline 'claude-main
+    '(eldoc bar workspace-name window-number modals matches buffer-info remote-host buffer-position parrot selection-info)
+    '(misc-info minor-modes input-method buffer-encoding major-mode process vcs check claude-status))
+  (doom-modeline-set-main-modeline 'claude-main t))
 ```
+
+**Note:** Using `load!` instead of `require` is Doom-idiomatic. The `after!` block ensures doom-modeline APIs are available when our module loads.

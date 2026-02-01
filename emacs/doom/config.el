@@ -74,3 +74,21 @@
 ;;
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
+
+;;; Claude Multi-Workspace Module
+;; Manages multiple Claude Code sessions in parallel across different repos
+;; and worktrees.
+
+;; Add custom modules to load path (Doom-idiomatic)
+(add-load-path! "modules/claude")
+
+;; Load Claude workflow module AFTER doom-modeline is available
+;; This ensures modeline segment can be defined properly
+(after! doom-modeline
+  (load! "modules/claude/claude")
+
+  ;; Set up custom modeline with Claude status
+  (doom-modeline-def-modeline 'claude-main
+    '(eldoc bar workspace-name window-number modals matches buffer-info remote-host buffer-position parrot selection-info)
+    '(misc-info minor-modes input-method buffer-encoding major-mode process vcs check claude-status))
+  (doom-modeline-set-main-modeline 'claude-main t))

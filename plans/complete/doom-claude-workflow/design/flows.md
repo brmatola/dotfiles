@@ -58,11 +58,11 @@ User: SPC C c
          ▼
 ┌─────────────────────────────────────┐
 │ 8. Set up workspace                 │
-│    - Open treemacs at worktree root │
 │    - Create vterm buffer            │
 │    - cd to worktree directory       │
 │    - Run `claude` command           │
 │    - Name: *claude:{repo}:{branch}* │
+│    - (Optional: open file browser)  │
 └─────────────────────────────────────┘
          │
          ▼
@@ -73,17 +73,25 @@ User: SPC C c
 
 ### Edge Cases
 
-**Branch already exists:**
+**Branch already exists (git exit code 255):**
+- Error: `fatal: a branch named 'X' already exists`
 - Prompt: "Branch {name} exists. [r]euse, [n]ew name, [c]ancel"
-- Reuse: create worktree from existing branch
+- Reuse: create worktree from existing branch (use `git worktree add {path} {branch}` without `-b`)
 - New name: prompt again
 
-**Worktree directory exists:**
+**Worktree directory exists (git exit code 128):**
+- Error: `fatal: '/path' already exists`
+- Note: Empty directories succeed silently (git uses them)
 - Prompt: "Worktree exists at {path}. [o]pen existing, [d]elete and recreate, [c]ancel"
 
 **Not in a git repo:**
 - Show completing-read with recently used repos
 - Or prompt for path
+
+**Partial failure cleanup:**
+- If worktree created but workspace creation fails: remove worktree, delete metadata
+- If workspace created but vterm fails: delete workspace, remove worktree, delete metadata
+- Always clean up in reverse order of creation
 
 ---
 
@@ -152,8 +160,14 @@ User: SPC C x (or x in dashboard)
 ┌─────────────────────────────────────┐
 │ 2. Merge worktree branch            │
 │    git merge {worktree_branch}      │
-│    Handle conflicts if any          │
 └─────────────────────────────────────┘
+         │
+         ├──── Success ────► Continue to cleanup
+         │
+         └──── Conflict ───► Abort merge, open magit
+                             Show message: "Resolve conflicts
+                             in magit, then run cleanup again"
+                             (Do NOT auto-cleanup on conflict)
          │
          ▼
 ┌─────────────────────────────────────┐
@@ -170,6 +184,15 @@ User: SPC C x (or x in dashboard)
 │ 4. Stop monitor if no workspaces    │
 └─────────────────────────────────────┘
 ```
+
+### Conflict Handling
+
+If merge fails due to conflicts:
+1. Run `git merge --abort` to restore clean state
+2. Open magit in parent repo via `magit-status`
+3. Display message explaining how to proceed
+4. User resolves conflicts manually in magit
+5. User re-runs `SPC C x` after resolution (will show "0 commits ahead" since merged)
 
 ### Fast Path (Already Merged)
 

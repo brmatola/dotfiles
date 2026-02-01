@@ -78,6 +78,18 @@ if [ -d "$DOTFILES_DIR/claude/skills" ] && [ "$(ls -A "$DOTFILES_DIR/claude/skil
 fi
 
 ###############################################################################
+# Claude Code CLI                                                             #
+###############################################################################
+
+if ! command -v claude &>/dev/null; then
+    echo ""
+    echo "Installing Claude Code CLI..."
+    npm install -g @anthropic-ai/claude-code
+else
+    echo "Claude Code CLI already installed: $(claude --version 2>/dev/null || echo 'installed')"
+fi
+
+###############################################################################
 # Doom Emacs                                                                  #
 ###############################################################################
 
@@ -126,9 +138,8 @@ echo ""
 echo "3. Git LFS"
 echo "   - Run: git lfs install"
 echo ""
-echo "4. Claude Code"
-echo "   - Install: npm install -g @anthropic-ai/claude-code"
-echo "   - Login: claude login"
+echo "4. Claude Code Login"
+echo "   - Run: claude login"
 echo ""
 echo "5. Restart your terminal to apply shell changes"
 echo ""

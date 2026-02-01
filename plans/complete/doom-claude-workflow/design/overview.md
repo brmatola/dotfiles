@@ -23,6 +23,24 @@ A modular Doom Emacs package that provides:
 4. **Flat workspace model** - All sessions are peers named `repo:branch`, filterable by repo
 5. **Pattern-based attention detection** - Scan last 15 lines for Claude prompts after 3s idle
 
+## Technical Viability (Verified)
+
+### Doom Workspaces ✅
+- API: `+workspace/new`, `+workspace/switch`, `+workspace/delete`, `+workspace-list-names`
+- **Persistence is automatic** via persp-mode (`~/.config/emacs/.local/etc/workspaces/autosave`)
+- Workspaces survive Emacs restart with no extra work
+
+### doom-modeline ✅
+- Custom segments via `doom-modeline-def-segment`
+- Clickable via `propertize` with `local-map` and `mouse-face`
+- Requires defining custom modeline layout with `doom-modeline-def-modeline`
+
+### vterm ✅
+- `vterm-send-string` for sending commands
+- Buffer content readable but may have fake newlines - use `vterm--filter-buffer-substring`
+- No built-in idle detection - use Emacs idle timers with polling
+- Process dies when buffer killed (expected)
+
 ## Related Documents
 
 - [Data Model](./data-model.md) - Directory structure and metadata format
@@ -30,3 +48,4 @@ A modular Doom Emacs package that provides:
 - [Monitor](./monitor.md) - Attention detection system
 - [Flows](./flows.md) - Creation and cleanup workflows
 - [File Structure](./file-structure.md) - Elisp module organization
+- [Verification](./verification.md) - Technical validation findings (2026-02-01)
