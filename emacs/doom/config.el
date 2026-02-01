@@ -91,4 +91,4 @@
   (doom-modeline-def-modeline 'claude-main
     '(eldoc bar workspace-name window-number modals matches buffer-info remote-host buffer-position parrot selection-info)
     '(misc-info minor-modes input-method buffer-encoding major-mode process vcs check claude-status))
-  (doom-modeline-set-main-modeline 'claude-main t))
+  (doom-modeline-set-modeline 'claude-main 'default))
