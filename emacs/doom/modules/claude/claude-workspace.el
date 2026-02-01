@@ -176,8 +176,12 @@ On failure, cleans up any partially created resources."
     (when parsed
       (let* ((buffer-name (claude-buffer-name (car parsed) (cdr parsed)))
              (buffer (get-buffer buffer-name)))
-        (when buffer
-          (switch-to-buffer buffer))))))
+        (when (and buffer (buffer-live-p buffer))
+          (switch-to-buffer buffer)
+          ;; Jump to end and redraw to avoid scrollback replay
+          (when (eq major-mode 'vterm-mode)
+            (goto-char (point-max))
+            (vterm-reset-cursor-point)))))))
 
 (defun claude-workspace-delete (workspace-name)
   "Delete WORKSPACE-NAME and kill associated buffers."
