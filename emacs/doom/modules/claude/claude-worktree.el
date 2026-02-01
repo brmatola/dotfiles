@@ -171,15 +171,23 @@ Returns list of (repo-name . branch-name) pairs."
      (shell-command-to-string "git rev-parse --abbrev-ref HEAD 2>/dev/null"))))
 
 (defun claude-git-commits-ahead (worktree-path parent-branch)
-  "Count commits ahead of PARENT-BRANCH in WORKTREE-PATH."
-  (if (not (file-directory-p worktree-path))
-      0
-    (let ((default-directory worktree-path))
-      (string-to-number
-       (string-trim
-        (shell-command-to-string
-         (format "git rev-list --count %s..HEAD 2>/dev/null || echo 0"
-                 (shell-quote-argument parent-branch))))))))
+  "Count commits ahead of PARENT-BRANCH in WORKTREE-PATH.
+Returns -1 if unable to determine (missing parent-branch, not a git repo, etc.)."
+  (cond
+   ;; No worktree path
+   ((not (file-directory-p worktree-path)) -1)
+   ;; No parent branch
+   ((or (null parent-branch) (string-empty-p parent-branch)) -1)
+   ;; Try to count commits
+   (t (let* ((default-directory worktree-path)
+             (result (string-trim
+                      (shell-command-to-string
+                       (format "git rev-list --count %s..HEAD 2>&1"
+                               (shell-quote-argument parent-branch))))))
+        ;; Check if result is a number
+        (if (string-match-p "^[0-9]+$" result)
+            (string-to-number result)
+          -1)))))
 
 (defun claude-git-merge-branch (repo-path target-branch source-branch)
   "Merge SOURCE-BRANCH into TARGET-BRANCH in REPO-PATH.

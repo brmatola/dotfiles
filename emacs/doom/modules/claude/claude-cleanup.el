@@ -106,7 +106,7 @@ Checks for uncommitted changes and prompts if dirty."
                      :parent-branch parent-branch
                      :parent-repo (plist-get metadata :parent_repo)
                      :commits-ahead commits-ahead)))
-    ;; Fast path: already merged
+    ;; Fast path: already merged (only if we could determine status)
     (if (and (= commits-ahead 0) parent-branch)
         (when (y-or-n-p "Branch already merged. Clean up? ")
           (claude-cleanup--do-cleanup info))
@@ -123,6 +123,7 @@ Checks for uncommitted changes and prompts if dirty."
                   (format "Parent: %s\n" (or parent-branch "unknown"))
                   (format "Status: %s\n"
                           (cond
+                           ((< commits-ahead 0) "Unknown (couldn't read git status)")
                            ((= commits-ahead 0) "No commits ahead (merged)")
                            ((= commits-ahead 1) "1 commit ahead")
                            (t (format "%d commits ahead" commits-ahead))))
@@ -130,11 +131,14 @@ Checks for uncommitted changes and prompts if dirty."
                   (propertize "[v]" 'face 'font-lock-keyword-face)
                   " View diff\n"
                   (propertize "[m]" 'face 'font-lock-keyword-face)
-                  " Merge & cleanup\n"
+                  (if (< commits-ahead 0)
+                      " Merge & cleanup (may fail)\n"
+                    " Merge & cleanup\n")
                   (propertize "[d]" 'face 'font-lock-keyword-face)
-                  (if (> commits-ahead 0)
-                      " Delete (lose changes)\n"
-                    " Delete\n")
+                  (cond
+                   ((< commits-ahead 0) " Delete (status unknown)\n")
+                   ((> commits-ahead 0) " Delete (lose changes)\n")
+                   (t " Delete\n"))
                   (propertize "[c]" 'face 'font-lock-keyword-face)
                   " Cancel\n"))
         (goto-char (point-min)))
@@ -195,13 +199,20 @@ Checks for uncommitted changes and prompts if dirty."
     ;; 0. Close status buffer first
     (when-let ((buffer (get-buffer "*Claude Cleanup*")))
       (kill-buffer buffer))
+
+    (message "Cleaning up %s..." workspace-name)
+    (redisplay)  ; Force UI update
+
     ;; 1. Switch away from this workspace before deleting it
+    (message "Cleaning up %s... switching workspace" workspace-name)
     (when (equal (+workspace-current-name) workspace-name)
       (let ((other-workspaces (remove workspace-name (+workspace-list-names))))
         (if other-workspaces
             (+workspace/switch-to (car other-workspaces))
           (+workspace/switch-to +workspace--last))))
     ;; 2. Kill Claude buffer (force kill to handle running process)
+    (message "Cleaning up %s... killing buffers" workspace-name)
+    (redisplay)
     (when-let ((buffer (get-buffer (claude-buffer-name repo-name branch-name))))
       (let ((kill-buffer-query-functions nil))  ; Skip "process running" prompt
         (kill-buffer buffer)))
@@ -213,12 +224,18 @@ Checks for uncommitted changes and prompts if dirty."
         (when (string-match-p term-pattern (buffer-name buf))
           (let ((kill-buffer-query-functions nil))
             (kill-buffer buf)))))
-    ;; 4. Delete Doom workspace
+    ;; 4. Kill Doom workspace
+    (message "Cleaning up %s... removing workspace" workspace-name)
+    (redisplay)
     (ignore-errors (+workspace-kill workspace-name))
     ;; 5. Remove git worktree
+    (message "Cleaning up %s... removing worktree" workspace-name)
+    (redisplay)
     (claude-worktree-remove repo-name branch-name)
     ;; 6. Delete branch from parent repo
     (when parent-repo
+      (message "Cleaning up %s... deleting branch" workspace-name)
+      (redisplay)
       (ignore-errors (claude-git-delete-branch parent-repo branch-name)))
     ;; 7. Delete metadata
     (claude-metadata-delete repo-name branch-name)
