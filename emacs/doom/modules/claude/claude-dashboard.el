@@ -45,6 +45,19 @@
 
 \\{claude-dashboard-mode-map}")
 
+;; Evil bindings for dashboard (Doom overrides the base keymap)
+(after! evil
+  (evil-set-initial-state 'claude-dashboard-mode 'normal)
+  (map! :map claude-dashboard-mode-map
+        :n "j" #'claude-dashboard-next
+        :n "k" #'claude-dashboard-prev
+        :n "RET" #'claude-dashboard-select
+        :n "c" #'claude-create-workspace
+        :n "x" #'claude-dashboard-close
+        :n "g" #'claude-dashboard-refresh
+        :n "/" #'claude-dashboard-filter
+        :n "q" #'quit-window))
+
 (defun claude-dashboard--get-workspaces ()
   "Get list of workspaces, optionally filtered.
 Home workspaces are sorted to the top."
