@@ -10,7 +10,7 @@
     ]
   },
   "enabledPlugins": {
-    "gremlins@brmatola/gremlins": true
+    "gremlins@gremlins-dev": true
   },
   "preferences": {
     "preferredNotifChannel": "notifications_disabled"
