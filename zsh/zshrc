@@ -1,0 +1,25 @@
+# OPENSPEC:START
+# OpenSpec shell completions configuration
+fpath=("/Users/bmatola/.zsh/completions" $fpath)
+autoload -Uz compinit
+compinit
+# OPENSPEC:END
+
+
+# Created by `pipx` on 2024-07-11 03:43:39
+export PATH="$PATH:/Users/bmatola/.local/bin"
+
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+. "$HOME/.cargo/env"
+
+# pyenv
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init - --path)"
+# Java 17 for Maestro
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH="$JAVA_HOME/bin:$PATH"
+
+# Maestro CLI
+export PATH="$PATH:$HOME/.maestro/bin"

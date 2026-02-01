@@ -1,0 +1,8 @@
+# OS files
+.DS_Store
+
+# Backup files
+*.backup
+
+# Local overrides (if you add them later)
+*.local

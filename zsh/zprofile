@@ -1,0 +1,2 @@
+# Created by `pipx` on 2024-07-11 03:43:39
+export PATH="$PATH:/Users/bmatola/.local/bin:/Applications/Postgres.app/Contents/Versions/latest/bin"
