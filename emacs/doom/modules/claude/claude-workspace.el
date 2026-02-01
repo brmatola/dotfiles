@@ -191,8 +191,8 @@ On failure, cleans up any partially created resources."
         ;; Kill the claude buffer if it exists
         (when-let ((buffer (get-buffer buffer-name)))
           (kill-buffer buffer))))
-    ;; Delete the workspace
-    (+workspace/delete workspace-name)))
+    ;; Kill the workspace (removes from tab bar)
+    (ignore-errors (+workspace-kill workspace-name))))
 
 ;;; Interactive commands
 

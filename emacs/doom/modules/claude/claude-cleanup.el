@@ -214,7 +214,7 @@ Checks for uncommitted changes and prompts if dirty."
           (let ((kill-buffer-query-functions nil))
             (kill-buffer buf)))))
     ;; 4. Delete Doom workspace
-    (ignore-errors (+workspace/delete workspace-name))
+    (ignore-errors (+workspace-kill workspace-name))
     ;; 5. Remove git worktree
     (claude-worktree-remove repo-name branch-name)
     ;; 6. Delete branch from parent repo
@@ -250,7 +250,7 @@ Simpler than worktree cleanup: no worktree removal, no metadata, no merge."
           (let ((kill-buffer-query-functions nil))
             (kill-buffer buf)))))
     ;; 4. Delete Doom workspace
-    (ignore-errors (+workspace/delete workspace-name))
+    (ignore-errors (+workspace-kill workspace-name))
     ;; 5. Stop monitor if no more workspaces
     (when (null (claude-workspace-list))
       (claude-monitor-stop))
