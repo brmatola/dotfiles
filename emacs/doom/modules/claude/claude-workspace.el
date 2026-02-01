@@ -169,8 +169,15 @@ On failure, cleans up any partially created resources."
        (signal (car err) (cdr err))))))
 
 (defun claude-workspace-switch (workspace-name)
-  "Switch to WORKSPACE-NAME."
-  (+workspace/switch-to workspace-name))
+  "Switch to WORKSPACE-NAME and focus its Claude buffer."
+  (+workspace/switch-to workspace-name)
+  ;; Focus the Claude buffer for this workspace
+  (let ((parsed (claude-parse-workspace-name workspace-name)))
+    (when parsed
+      (let* ((buffer-name (claude-buffer-name (car parsed) (cdr parsed)))
+             (buffer (get-buffer buffer-name)))
+        (when buffer
+          (switch-to-buffer buffer))))))
 
 (defun claude-workspace-delete (workspace-name)
   "Delete WORKSPACE-NAME and kill associated buffers."
