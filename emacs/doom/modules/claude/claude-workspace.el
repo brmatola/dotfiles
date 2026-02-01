@@ -15,6 +15,7 @@
 (declare-function +workspace-list-names "~/.config/emacs/modules/ui/workspaces/autoload/workspaces")
 (declare-function +workspace-current-name "~/.config/emacs/modules/ui/workspaces/autoload/workspaces")
 (declare-function magit-status "magit-status")
+(declare-function treemacs-add-and-display-current-project-exclusively "treemacs")
 
 ;; Forward declarations for claude-worktree functions
 (declare-function claude-worktree-create "claude-worktree")
@@ -150,7 +151,12 @@ On failure, cleans up any partially created resources."
             (switch-to-buffer vterm-buffer)
             ;; Send commands to vterm: cd to worktree and run claude
             (vterm-send-string (format "cd %s && clear && claude\n"
-                                       (shell-quote-argument worktree-path))))
+                                       (shell-quote-argument worktree-path)))
+            ;; Open treemacs rooted at workspace directory
+            (let ((default-directory worktree-path))
+              (treemacs-add-and-display-current-project-exclusively))
+            ;; Return focus to Claude buffer
+            (select-window (get-buffer-window vterm-buffer)))
           workspace-name)
       (error
        ;; Cleanup on failure - reverse order of creation
