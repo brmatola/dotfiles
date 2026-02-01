@@ -40,5 +40,14 @@
        :desc "Toggle monitor" "m" #'claude-monitor-toggle
        :desc "Magit status" "g" #'claude-magit-status))
 
+;; Send ESC to vterm with C-g (useful for Claude's "go back" action)
+(after! vterm
+  (defun claude-vterm-send-escape ()
+    "Send ESC key to vterm."
+    (interactive)
+    (vterm-send-key "<escape>"))
+  (map! :map vterm-mode-map
+        :i "C-g" #'claude-vterm-send-escape))
+
 (provide 'claude)
 ;;; claude.el ends here
