@@ -39,15 +39,15 @@
 
 \\{claude-cleanup-mode-map}")
 
-;; Evil bindings for cleanup mode (Doom overrides the base keymap)
-(after! evil
-  (evil-set-initial-state 'claude-cleanup-mode 'normal)
-  (map! :map claude-cleanup-mode-map
-        :n "v" #'claude-cleanup-view-diff
-        :n "m" #'claude-cleanup-merge
-        :n "d" #'claude-cleanup-delete
-        :n "c" #'claude-cleanup-cancel
-        :n "q" #'claude-cleanup-cancel))
+;; Evil bindings for cleanup mode
+(add-hook! 'claude-cleanup-mode-hook
+  (defun claude-cleanup--setup-keys ()
+    (evil-local-set-key 'normal (kbd "v") #'claude-cleanup-view-diff)
+    (evil-local-set-key 'normal (kbd "m") #'claude-cleanup-merge)
+    (evil-local-set-key 'normal (kbd "d") #'claude-cleanup-delete)
+    (evil-local-set-key 'normal (kbd "c") #'claude-cleanup-cancel)
+    (evil-local-set-key 'normal (kbd "q") #'claude-cleanup-cancel)
+    (evil-local-set-key 'normal (kbd "RET") #'claude-cleanup-merge)))
 
 (defvar-local claude-cleanup--workspace-info nil
   "Current workspace info for cleanup buffer.")

@@ -45,18 +45,17 @@
 
 \\{claude-dashboard-mode-map}")
 
-;; Evil bindings for dashboard (Doom overrides the base keymap)
-(after! evil
-  (evil-set-initial-state 'claude-dashboard-mode 'normal)
-  (map! :map claude-dashboard-mode-map
-        :n "j" #'claude-dashboard-next
-        :n "k" #'claude-dashboard-prev
-        :n "RET" #'claude-dashboard-select
-        :n "c" #'claude-create-workspace
-        :n "x" #'claude-dashboard-close
-        :n "g" #'claude-dashboard-refresh
-        :n "/" #'claude-dashboard-filter
-        :n "q" #'quit-window))
+;; Evil bindings for dashboard
+(add-hook! 'claude-dashboard-mode-hook
+  (defun claude-dashboard--setup-keys ()
+    (evil-local-set-key 'normal (kbd "j") #'claude-dashboard-next)
+    (evil-local-set-key 'normal (kbd "k") #'claude-dashboard-prev)
+    (evil-local-set-key 'normal (kbd "RET") #'claude-dashboard-select)
+    (evil-local-set-key 'normal (kbd "c") #'claude-create-workspace)
+    (evil-local-set-key 'normal (kbd "x") #'claude-dashboard-close)
+    (evil-local-set-key 'normal (kbd "g") #'claude-dashboard-refresh)
+    (evil-local-set-key 'normal (kbd "/") #'claude-dashboard-filter)
+    (evil-local-set-key 'normal (kbd "q") #'quit-window)))
 
 (defun claude-dashboard--get-workspaces ()
   "Get list of workspaces, optionally filtered.
