@@ -192,51 +192,69 @@ Checks for uncommitted changes and prompts if dirty."
         (workspace-name (format "%s:%s"
                                 (plist-get info :repo-name)
                                 (plist-get info :branch-name))))
-    ;; 1. Kill Claude buffer
-    (when-let ((buffer (get-buffer (claude-buffer-name repo-name branch-name))))
+    ;; 0. Close status buffer first
+    (when-let ((buffer (get-buffer "*Claude Cleanup*")))
       (kill-buffer buffer))
-    ;; 2. Kill all terminal buffers for this workspace
+    ;; 1. Switch away from this workspace before deleting it
+    (when (equal (+workspace-current-name) workspace-name)
+      (let ((other-workspaces (remove workspace-name (+workspace-list-names))))
+        (if other-workspaces
+            (+workspace/switch-to (car other-workspaces))
+          (+workspace/switch-to +workspace--last))))
+    ;; 2. Kill Claude buffer (force kill to handle running process)
+    (when-let ((buffer (get-buffer (claude-buffer-name repo-name branch-name))))
+      (let ((kill-buffer-query-functions nil))  ; Skip "process running" prompt
+        (kill-buffer buffer)))
+    ;; 3. Kill all terminal buffers for this workspace
     (let ((term-pattern (format "\\*term:%s:%s:[0-9]+\\*"
                                 (regexp-quote repo-name)
                                 (regexp-quote branch-name))))
       (dolist (buf (buffer-list))
         (when (string-match-p term-pattern (buffer-name buf))
-          (kill-buffer buf))))
-    ;; 3. Delete Doom workspace
-    (claude-workspace-delete workspace-name)
-    ;; 4. Remove git worktree
+          (let ((kill-buffer-query-functions nil))
+            (kill-buffer buf)))))
+    ;; 4. Delete Doom workspace
+    (ignore-errors (+workspace/delete workspace-name))
+    ;; 5. Remove git worktree
     (claude-worktree-remove repo-name branch-name)
-    ;; 5. Delete branch from parent repo
+    ;; 6. Delete branch from parent repo
     (when parent-repo
-      (claude-git-delete-branch parent-repo branch-name))
-    ;; 6. Delete metadata
+      (ignore-errors (claude-git-delete-branch parent-repo branch-name)))
+    ;; 7. Delete metadata
     (claude-metadata-delete repo-name branch-name)
-    ;; 7. Stop monitor if no more workspaces
+    ;; 8. Stop monitor if no more workspaces
     (when (null (claude-workspace-list))
       (claude-monitor-stop))
-    ;; Close status buffer
-    (when-let ((buffer (get-buffer "*Claude Cleanup*")))
-      (kill-buffer buffer))))
+    (message "Workspace %s cleaned up" workspace-name)))
 
 (defun claude-cleanup--do-home-cleanup (repo-name branch-name)
   "Perform cleanup steps for home workspace REPO-NAME:BRANCH-NAME.
 Simpler than worktree cleanup: no worktree removal, no metadata, no merge."
   (let ((workspace-name (format "%s:%s" repo-name branch-name)))
-    ;; 1. Kill Claude buffer
+    ;; 1. Switch away from this workspace before deleting it
+    (when (equal (+workspace-current-name) workspace-name)
+      (let ((other-workspaces (remove workspace-name (+workspace-list-names))))
+        (if other-workspaces
+            (+workspace/switch-to (car other-workspaces))
+          (+workspace/switch-to +workspace--last))))
+    ;; 2. Kill Claude buffer (force kill to handle running process)
     (when-let ((buffer (get-buffer (claude-buffer-name repo-name branch-name))))
-      (kill-buffer buffer))
-    ;; 2. Kill all terminal buffers for this home workspace
+      (let ((kill-buffer-query-functions nil))
+        (kill-buffer buffer)))
+    ;; 3. Kill all terminal buffers for this home workspace
     (let ((term-pattern (format "\\*term:%s:%s:[0-9]+\\*"
                                 (regexp-quote repo-name)
                                 (regexp-quote branch-name))))
       (dolist (buf (buffer-list))
         (when (string-match-p term-pattern (buffer-name buf))
-          (kill-buffer buf))))
-    ;; 3. Delete Doom workspace
-    (claude-workspace-delete workspace-name)
-    ;; 4. Stop monitor if no more workspaces
+          (let ((kill-buffer-query-functions nil))
+            (kill-buffer buf)))))
+    ;; 4. Delete Doom workspace
+    (ignore-errors (+workspace/delete workspace-name))
+    ;; 5. Stop monitor if no more workspaces
     (when (null (claude-workspace-list))
-      (claude-monitor-stop))))
+      (claude-monitor-stop))
+    (message "Home workspace %s cleaned up" workspace-name)))
 
 (provide 'claude-cleanup)
 ;;; claude-cleanup.el ends here
