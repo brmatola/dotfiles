@@ -10,6 +10,7 @@
 (declare-function claude-workspace-switch "claude-workspace")
 (declare-function claude-buffer-name "claude-workspace")
 (declare-function claude-parse-workspace-name "claude-workspace")
+(declare-function claude-home-workspace-p "claude-workspace")
 (declare-function claude-create-workspace "claude-workspace")
 (declare-function claude-close-workspace "claude-cleanup")
 
@@ -45,14 +46,29 @@
 \\{claude-dashboard-mode-map}")
 
 (defun claude-dashboard--get-workspaces ()
-  "Get list of workspaces, optionally filtered."
+  "Get list of workspaces, optionally filtered.
+Home workspaces are sorted to the top."
   (let ((workspaces (claude-workspace-list)))
-    (if claude-dashboard-filter
-        (seq-filter (lambda (ws)
-                      (string-prefix-p (concat claude-dashboard-filter ":")
-                                       ws))
-                    workspaces)
-      workspaces)))
+    ;; Apply filter if set
+    (when claude-dashboard-filter
+      (setq workspaces
+            (seq-filter (lambda (ws)
+                          (string-prefix-p (concat claude-dashboard-filter ":")
+                                           ws))
+                        workspaces)))
+    ;; Sort: home workspaces first, then alphabetically within each group
+    (sort workspaces
+          (lambda (a b)
+            (let ((a-home (claude-home-workspace-p a))
+                  (b-home (claude-home-workspace-p b)))
+              (cond
+               ;; Both home or both not home: sort alphabetically
+               ((eq (not a-home) (not b-home))
+                (string< a b))
+               ;; a is home, b is not: a comes first
+               (a-home t)
+               ;; b is home, a is not: b comes first
+               (t nil)))))))
 
 (defun claude-dashboard--render ()
   "Render dashboard buffer contents."
@@ -75,12 +91,17 @@
                  (buffer-name (claude-buffer-name repo-name branch-name))
                  (buffer (get-buffer buffer-name))
                  (needs-attention (and buffer
-                                       (buffer-local-value 'claude--needs-attention buffer))))
+                                       (buffer-local-value 'claude--needs-attention buffer)))
+                 (is-home (claude-home-workspace-p ws))
+                 ;; Display name: "⌂ repo" for home, "  repo:branch" for worktree
+                 (display-name (if is-home
+                                   (format "⌂ %s" repo-name)
+                                 (format "  %s" ws))))
             (insert (propertize (if needs-attention "● " "○ ")
                                 'face (if needs-attention
                                           'claude-attention-face
                                         'claude-idle-face))
-                    (propertize ws 'face 'default
+                    (propertize display-name 'face 'default
                                 'claude-workspace ws)
                     "\n")))
       (insert (propertize "No Claude workspaces active.\n"

@@ -38,6 +38,24 @@ A system for managing multiple Claude Code sessions in parallel across different
 
 Each Claude session gets its own isolated git worktree and Doom workspace. A monitor watches all sessions and alerts you when any Claude needs input. A dashboard gives you a bird's-eye view of all active work.
 
+### Home Workspace
+
+A "home workspace" is a Claude session in the main repository (not a worktree). Use it for:
+- Planning and coordination across worktree branches
+- Pushing updates to main branch
+- Running dev servers and experiments
+- Managing worktree branches via magit
+
+**Usage:**
+- `SPC C h` from any repo opens/creates its home workspace
+- `SPC C h` from a Claude-managed worktree jumps to the parent repo's home
+- Home workspaces show with `⌂` prefix in the dashboard
+- Cleanup (`SPC C x`) warns on uncommitted changes, no merge flow
+
+### Extra Terminals
+
+Spawn additional terminals in any workspace with `SPC C t`. Terminals are numbered (`*term:repo:branch:1*`, `*term:repo:branch:2*`, etc.) and gap numbers are reused (if you close terminal 2, the next `SPC C t` creates terminal 2 again).
+
 ### Directory Structure
 
 ```
@@ -57,10 +75,12 @@ All commands under `SPC C` prefix:
 |-----|---------|-------------|
 | `SPC C c` | Create workspace | New worktree + workspace + Claude session |
 | `SPC C d` | Dashboard | See all sessions, status, navigate |
+| `SPC C h` | Home workspace | Jump to/create home workspace for current repo |
 | `SPC C j` | Jump to Claude | Focus Claude buffer in current workspace |
+| `SPC C t` | New terminal | Spawn extra terminal in current workspace |
 | `SPC C x` | Close workspace | Merge-aware cleanup with confirmation |
 | `SPC C m` | Toggle monitor | Start/stop attention detection |
-| `SPC C g` | Magit status | Open magit in current worktree |
+| `SPC C g` | Magit status | Open magit in current workspace |
 
 ### Dashboard Keys
 

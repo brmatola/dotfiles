@@ -21,9 +21,74 @@
 (declare-function claude-worktree-create-from-existing "claude-worktree")
 (declare-function claude-worktree-remove "claude-worktree")
 (declare-function claude-worktree-path "claude-worktree")
+(declare-function claude-worktree-list "claude-worktree")
 (declare-function claude-repo-name "claude-worktree")
 (declare-function claude-git-current-branch "claude-worktree")
+(declare-function claude-metadata-read "claude-worktree")
 (declare-function claude-monitor-start "claude-monitor")
+
+;;; Home workspace utilities
+
+(defun claude-home-workspace-p (workspace-name)
+  "Return non-nil if WORKSPACE-NAME is a home workspace.
+Home workspaces have branch name `__home__'."
+  (and workspace-name
+       (string-suffix-p ":__home__" workspace-name)))
+
+(defun claude-home-exists-p (repo-name)
+  "Return non-nil if home workspace exists for REPO-NAME."
+  (member (format "%s:__home__" repo-name) (+workspace-list-names)))
+
+(defun claude-get-repo-from-worktree ()
+  "Get parent repo path when in a Claude-managed worktree.
+Returns the :parent_repo from worktree metadata, or nil if not found."
+  (let* ((git-dir (string-trim (shell-command-to-string
+                                "git rev-parse --git-dir 2>/dev/null")))
+         (common-dir (string-trim (shell-command-to-string
+                                   "git rev-parse --git-common-dir 2>/dev/null"))))
+    ;; If git-dir equals common-dir, we're in the main repo, not a worktree
+    (unless (or (string-empty-p git-dir)
+                (string-empty-p common-dir)
+                (string= (expand-file-name git-dir)
+                         (expand-file-name common-dir)))
+      ;; We're in a worktree, try to get parent repo from metadata
+      (let* ((toplevel (string-trim (shell-command-to-string
+                                     "git rev-parse --show-toplevel 2>/dev/null")))
+             (worktree-name (file-name-nondirectory (directory-file-name toplevel)))
+             (parent-dir (file-name-directory (directory-file-name toplevel)))
+             (repo-name (file-name-nondirectory (directory-file-name parent-dir))))
+        ;; Try to read metadata
+        (let ((metadata (claude-metadata-read repo-name worktree-name)))
+          (when metadata
+            (plist-get metadata :parent_repo)))))))
+
+(defun claude-workspace-path (workspace-name)
+  "Get working directory for WORKSPACE-NAME.
+For home workspaces, returns the main repo path.
+For worktree workspaces, returns the worktree path."
+  (let ((parsed (claude-parse-workspace-name workspace-name)))
+    (when parsed
+      (let ((repo-name (car parsed))
+            (branch-name (cdr parsed)))
+        (if (claude-home-workspace-p workspace-name)
+            ;; Home workspace - need to find main repo path
+            ;; Check if we're currently in that repo
+            (let ((current-repo (claude--get-repo-path)))
+              (if (and current-repo
+                       (string= (claude-repo-name current-repo) repo-name))
+                  (expand-file-name current-repo)
+                ;; Try to get from a worktree's metadata
+                (let ((worktrees (claude-worktree-list)))
+                  (catch 'found
+                    (dolist (wt worktrees)
+                      (when (string= (car wt) repo-name)
+                        (let ((metadata (claude-metadata-read (car wt) (cdr wt))))
+                          (when metadata
+                            (throw 'found (plist-get metadata :parent_repo))))))
+                    ;; Fallback: expand from typical location
+                    nil))))
+          ;; Worktree workspace
+          (claude-worktree-path repo-name branch-name))))))
 
 ;;; Naming utilities
 
@@ -186,6 +251,53 @@ Detects current repo, prompts for branch name, creates worktree and workspace."
           (user-error "Failed to create worktree: %s" (cdr result))))))))
 
 ;;;###autoload
+(defun claude-home-workspace ()
+  "Jump to home workspace for current repo, creating if needed.
+From main repo: creates/jumps to home workspace.
+From Claude-managed worktree: jumps to parent repo's home.
+From non-Claude worktree: shows error with guidance."
+  (interactive)
+  ;; Check for claude command
+  (unless (executable-find "claude")
+    (user-error "Claude CLI not found. Run: npm install -g @anthropic-ai/claude-code"))
+  ;; Determine if we're in a worktree or main repo
+  (let* ((git-dir (string-trim (shell-command-to-string
+                                "git rev-parse --git-dir 2>/dev/null")))
+         (common-dir (string-trim (shell-command-to-string
+                                   "git rev-parse --git-common-dir 2>/dev/null"))))
+    (cond
+     ;; Not in a git repo
+     ((or (string-empty-p git-dir) (string-empty-p common-dir))
+      (user-error "Not in a git repository"))
+     ;; In a worktree (git-dir != common-dir)
+     ((not (string= (expand-file-name git-dir)
+                    (expand-file-name common-dir)))
+      (let ((parent-repo (claude-get-repo-from-worktree)))
+        (if parent-repo
+            (claude--home-workspace-for-repo parent-repo)
+          (user-error "Not in a Claude-managed worktree. Use SPC C h from the main repo"))))
+     ;; In main repo
+     (t
+      (let ((repo-path (claude--get-repo-path)))
+        (if repo-path
+            (claude--home-workspace-for-repo (expand-file-name repo-path))
+          (user-error "Not in a git repository")))))))
+
+(defun claude--home-workspace-for-repo (repo-path)
+  "Create or switch to home workspace for REPO-PATH."
+  (let* ((repo-name (claude-repo-name repo-path))
+         (workspace-name (claude-workspace-name repo-name "__home__")))
+    (if (claude-home-exists-p repo-name)
+        ;; Switch to existing home workspace
+        (progn
+          (claude-workspace-switch workspace-name)
+          (message "Switched to home workspace for %s" repo-name))
+      ;; Create new home workspace
+      (claude-workspace-create repo-name "__home__" repo-path)
+      (claude-monitor-start)
+      (message "Created home workspace for %s" repo-name))))
+
+;;;###autoload
 (defun claude-jump-to-buffer ()
   "Jump to Claude buffer in current workspace."
   (interactive)
@@ -201,16 +313,62 @@ Detects current repo, prompts for branch name, creates worktree and workspace."
 
 ;;;###autoload
 (defun claude-magit-status ()
-  "Open magit in current worktree."
+  "Open magit in current workspace (works for both home and worktree)."
+  (interactive)
+  (let ((workspace (claude-workspace-current)))
+    (if workspace
+        (let ((workspace-path (claude-workspace-path workspace)))
+          (if (and workspace-path (file-directory-p workspace-path))
+              (let ((default-directory workspace-path))
+                (magit-status))
+            (user-error "Workspace path not found")))
+      (user-error "Not in a Claude workspace"))))
+
+;;; Terminal utilities
+
+(defun claude-terminal-buffer-name (repo-name branch-name)
+  "Generate terminal buffer name for REPO-NAME and BRANCH-NAME.
+Finds the first available number, reusing gaps in the sequence."
+  (let* ((prefix (format "*term:%s:%s:" repo-name branch-name))
+         (pattern (format "\\*term:%s:%s:\\([0-9]+\\)\\*"
+                          (regexp-quote repo-name)
+                          (regexp-quote branch-name)))
+         (existing-numbers
+          (delq nil
+                (mapcar (lambda (buf)
+                          (let ((name (buffer-name buf)))
+                            (when (string-match pattern name)
+                              (string-to-number (match-string 1 name)))))
+                        (buffer-list))))
+         (sorted (sort existing-numbers #'<))
+         (next-num 1))
+    ;; Find first gap in sequence starting from 1
+    (while (member next-num sorted)
+      (setq next-num (1+ next-num)))
+    (format "*term:%s:%s:%d*" repo-name branch-name next-num)))
+
+;;;###autoload
+(defun claude-new-terminal ()
+  "Spawn a new terminal in the current Claude workspace."
   (interactive)
   (let ((workspace (claude-workspace-current)))
     (if workspace
         (let* ((parsed (claude-parse-workspace-name workspace))
-               (worktree-path (claude-worktree-path (car parsed) (cdr parsed))))
-          (if (file-directory-p worktree-path)
-              (let ((default-directory worktree-path))
-                (magit-status))
-            (user-error "Worktree not found: %s" worktree-path)))
+               (repo-name (car parsed))
+               (branch-name (cdr parsed))
+               (workspace-path (claude-workspace-path workspace))
+               (buffer-name (claude-terminal-buffer-name repo-name branch-name)))
+          (if (and workspace-path (file-directory-p workspace-path))
+              (let ((vterm-buffer (get-buffer-create buffer-name)))
+                (with-current-buffer vterm-buffer
+                  (unless (eq major-mode 'vterm-mode)
+                    (vterm-mode)))
+                (switch-to-buffer vterm-buffer)
+                ;; cd to workspace directory
+                (vterm-send-string (format "cd %s && clear\n"
+                                           (shell-quote-argument workspace-path)))
+                (message "Created terminal %s" buffer-name))
+            (user-error "Workspace path not found")))
       (user-error "Not in a Claude workspace"))))
 
 (provide 'claude-workspace)

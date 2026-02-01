@@ -20,6 +20,8 @@
 (declare-function claude-workspace-list "claude-workspace")
 (declare-function claude-buffer-name "claude-workspace")
 (declare-function claude-parse-workspace-name "claude-workspace")
+(declare-function claude-home-workspace-p "claude-workspace")
+(declare-function claude-workspace-path "claude-workspace")
 (declare-function claude-monitor-stop "claude-monitor")
 
 (defvar claude-cleanup-mode-map
@@ -43,13 +45,39 @@
 ;;;###autoload
 (defun claude-close-workspace (&optional workspace-name)
   "Close WORKSPACE-NAME with merge-aware cleanup.
-If WORKSPACE-NAME is nil, uses current workspace."
+If WORKSPACE-NAME is nil, uses current workspace.
+Home workspaces get a simpler flow (dirty check, no merge)."
   (interactive)
   (let* ((ws (or workspace-name (claude-workspace-current)))
          (parsed (and ws (claude-parse-workspace-name ws))))
     (if parsed
-        (claude-cleanup--show-status parsed)
+        (if (claude-home-workspace-p ws)
+            (claude-cleanup--close-home-workspace parsed)
+          (claude-cleanup--show-status parsed))
       (user-error "Not in a Claude workspace"))))
+
+(defun claude-cleanup--close-home-workspace (parsed)
+  "Close home workspace for PARSED (repo-name . branch-name).
+Checks for uncommitted changes and prompts if dirty."
+  (let* ((repo-name (car parsed))
+         (branch-name (cdr parsed))
+         (workspace-name (format "%s:%s" repo-name branch-name))
+         (workspace-path (claude-workspace-path workspace-name)))
+    (if (not workspace-path)
+        (progn
+          ;; No path found, just close the workspace
+          (claude-cleanup--do-home-cleanup repo-name branch-name)
+          (message "Home workspace closed"))
+      ;; Check for dirty state
+      (let* ((default-directory workspace-path)
+             (status (string-trim (shell-command-to-string
+                                   "git status --porcelain 2>/dev/null")))
+             (is-dirty (not (string-empty-p status))))
+        (if (and is-dirty
+                 (not (y-or-n-p "Uncommitted changes. Close anyway? ")))
+            (message "Cancelled")
+          (claude-cleanup--do-home-cleanup repo-name branch-name)
+          (message "Home workspace closed"))))))
 
 (defun claude-cleanup--show-status (parsed)
   "Show status buffer for PARSED workspace (repo-name . branch-name)."
@@ -157,21 +185,48 @@ If WORKSPACE-NAME is nil, uses current workspace."
     ;; 1. Kill Claude buffer
     (when-let ((buffer (get-buffer (claude-buffer-name repo-name branch-name))))
       (kill-buffer buffer))
-    ;; 2. Delete Doom workspace
+    ;; 2. Kill all terminal buffers for this workspace
+    (let ((term-pattern (format "\\*term:%s:%s:[0-9]+\\*"
+                                (regexp-quote repo-name)
+                                (regexp-quote branch-name))))
+      (dolist (buf (buffer-list))
+        (when (string-match-p term-pattern (buffer-name buf))
+          (kill-buffer buf))))
+    ;; 3. Delete Doom workspace
     (claude-workspace-delete workspace-name)
-    ;; 3. Remove git worktree
+    ;; 4. Remove git worktree
     (claude-worktree-remove repo-name branch-name)
-    ;; 4. Delete branch from parent repo
+    ;; 5. Delete branch from parent repo
     (when parent-repo
       (claude-git-delete-branch parent-repo branch-name))
-    ;; 5. Delete metadata
+    ;; 6. Delete metadata
     (claude-metadata-delete repo-name branch-name)
-    ;; 6. Stop monitor if no more workspaces
+    ;; 7. Stop monitor if no more workspaces
     (when (null (claude-workspace-list))
       (claude-monitor-stop))
     ;; Close status buffer
     (when-let ((buffer (get-buffer "*Claude Cleanup*")))
       (kill-buffer buffer))))
+
+(defun claude-cleanup--do-home-cleanup (repo-name branch-name)
+  "Perform cleanup steps for home workspace REPO-NAME:BRANCH-NAME.
+Simpler than worktree cleanup: no worktree removal, no metadata, no merge."
+  (let ((workspace-name (format "%s:%s" repo-name branch-name)))
+    ;; 1. Kill Claude buffer
+    (when-let ((buffer (get-buffer (claude-buffer-name repo-name branch-name))))
+      (kill-buffer buffer))
+    ;; 2. Kill all terminal buffers for this home workspace
+    (let ((term-pattern (format "\\*term:%s:%s:[0-9]+\\*"
+                                (regexp-quote repo-name)
+                                (regexp-quote branch-name))))
+      (dolist (buf (buffer-list))
+        (when (string-match-p term-pattern (buffer-name buf))
+          (kill-buffer buf))))
+    ;; 3. Delete Doom workspace
+    (claude-workspace-delete workspace-name)
+    ;; 4. Stop monitor if no more workspaces
+    (when (null (claude-workspace-list))
+      (claude-monitor-stop))))
 
 (provide 'claude-cleanup)
 ;;; claude-cleanup.el ends here

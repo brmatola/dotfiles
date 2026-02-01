@@ -33,7 +33,9 @@
       (:prefix ("C" . "claude")
        :desc "Create workspace" "c" #'claude-create-workspace
        :desc "Dashboard" "d" #'claude-dashboard
+       :desc "Home workspace" "h" #'claude-home-workspace
        :desc "Jump to Claude" "j" #'claude-jump-to-buffer
+       :desc "New terminal" "t" #'claude-new-terminal
        :desc "Close workspace" "x" #'claude-close-workspace
        :desc "Toggle monitor" "m" #'claude-monitor-toggle
        :desc "Magit status" "g" #'claude-magit-status))

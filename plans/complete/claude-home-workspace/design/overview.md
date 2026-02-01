@@ -12,14 +12,14 @@ The current multi-Claude workflow only supports worktree-based workspaces. Users
 
 ## Solution
 
-Add a "home workspace" concept - a Claude session that runs in the main repository (not a worktree). One home per repo, accessible from anywhere with `SPC C h`.
+Add a "home workspace" concept - a Claude session that runs in the main repository (not a worktree). One home per repo, accessible from anywhere with `SPC C h`. Uses `__home__` namespace internally to avoid conflicts with branches named "home".
 
 ## Key Features
 
 1. **`SPC C h`** - Jump to home workspace (create if needed)
-2. **`SPC C t`** - Spawn extra terminals in any workspace
+2. **`SPC C t`** - Spawn extra terminals in any workspace (reuses gaps in numbering)
 3. **Home-aware cleanup** - Warn on uncommitted changes, no merge flow
-4. **Dashboard integration** - Show home workspaces with `⌂` indicator
+4. **Dashboard integration** - Show home workspaces with `⌂` prefix, sorted to top
 
 ## Design Documents
 
