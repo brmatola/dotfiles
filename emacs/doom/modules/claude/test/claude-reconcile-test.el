@@ -252,9 +252,16 @@
     (should-not (claude--check-worktree metadata))))
 
 (ert-deftest claude-reconcile-test-check-worktree-home ()
-  "Test worktree check for home workspace (no worktree needed)."
-    (let ((metadata (list :worktree_path nil :type "home")))
-    (should (claude--check-worktree metadata))))
+  "Test worktree check for home workspace verifies parent_repo exists."
+  ;; Home workspace with valid parent_repo should pass
+  (let ((metadata (list :worktree_path nil :type "home" :parent_repo "~")))
+    (should (claude--check-worktree metadata)))
+  ;; Home workspace with missing parent_repo should fail
+  (let ((metadata (list :worktree_path nil :type "home" :parent_repo "/nonexistent")))
+    (should-not (claude--check-worktree metadata)))
+  ;; Home workspace with nil parent_repo should fail
+  (let ((metadata (list :worktree_path nil :type "home" :parent_repo nil)))
+    (should-not (claude--check-worktree metadata))))
 
 (provide 'claude-reconcile-test)
 ;;; claude-reconcile-test.el ends here

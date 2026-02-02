@@ -226,6 +226,7 @@ Clear attention state when workspace becomes non-active."
 ;;; Modeline Segment
 
 (with-eval-after-load 'doom-modeline
+  ;; Define the segment
   (doom-modeline-def-segment claude-status
     "Display Claude session status."
     (let* ((workspaces (claude--list-active-workspaces))
@@ -242,7 +243,17 @@ Clear attention state when workspace becomes non-active."
           'local-map map
           'help-echo (format "%d Claude session(s)%s - click to jump"
                             (length workspaces)
-                            (if needs-attention " (attention needed)" ""))))))))
+                            (if needs-attention " (attention needed)" "")))))))
+
+  ;; Add segment to the main modeline (after misc-info, before input-method)
+  (doom-modeline-def-modeline 'main
+    '(eldoc bar workspace-name window-number modals matches follow buffer-info remote-host buffer-position word-count parrot selection-info)
+    '(compilation objed-state misc-info claude-status persp-name battery grip irc mu4e gnus github debug repl lsp minor-modes input-method indent-info buffer-encoding major-mode process vcs check time))
+
+  ;; Also add to vterm modeline so it shows in Claude buffers
+  (doom-modeline-def-modeline 'vterm
+    '(eldoc bar workspace-name window-number modals buffer-info remote-host buffer-position)
+    '(compilation misc-info claude-status persp-name battery irc mu4e gnus github debug minor-modes buffer-encoding major-mode process time)))
 
 ;;; Auto-start on Doom Init
 

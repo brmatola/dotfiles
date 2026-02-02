@@ -28,6 +28,9 @@
 (defvar claude-dashboard-filter nil
   "Current repo filter, or nil for all repos.")
 
+(defvar claude-dashboard--auto-close t
+  "When non-nil, auto-close dashboard when navigating away.")
+
 ;;; State Symbols for Display
 
 (defconst claude-dashboard--state-symbols
@@ -55,19 +58,48 @@
     (define-key map "j" #'claude-dashboard-next)
     (define-key map "k" #'claude-dashboard-prev)
     (define-key map (kbd "RET") #'claude-dashboard-select)
-    (define-key map "c" #'claude-create-workspace)
+    (define-key map "c" #'claude-dashboard-create-and-close)
     (define-key map "x" #'claude-dashboard-close)
     (define-key map "r" #'claude-dashboard-repair)
     (define-key map "g" #'claude-dashboard-refresh)
     (define-key map "/" #'claude-dashboard-filter)
-    (define-key map "q" #'quit-window)
+    (define-key map "q" #'claude-dashboard-quit)
     map)
   "Keymap for Claude dashboard mode.")
 
 (define-derived-mode claude-dashboard-mode special-mode "Claude"
   "Major mode for Claude workspace dashboard.
 
-\\{claude-dashboard-mode-map}")
+\\{claude-dashboard-mode-map}"
+  ;; Auto-close when window is no longer showing dashboard
+  (add-hook 'window-selection-change-functions
+            #'claude-dashboard--maybe-kill nil t))
+
+(defun claude-dashboard--maybe-kill (_frame)
+  "Kill dashboard buffer if it's no longer visible.
+Called via `window-selection-change-functions'."
+  (when claude-dashboard--auto-close
+    (when-let ((buf (get-buffer claude-dashboard-buffer-name)))
+      ;; Only kill if buffer is not displayed in any window
+      (unless (get-buffer-window buf t)
+        (kill-buffer buf)))))
+
+(defun claude-dashboard--kill-and-switch (switch-fn &rest args)
+  "Kill dashboard buffer and call SWITCH-FN with ARGS."
+  (let ((dashboard-buf (current-buffer)))
+    (apply switch-fn args)
+    (when (buffer-live-p dashboard-buf)
+      (kill-buffer dashboard-buf))))
+
+(defun claude-dashboard-quit ()
+  "Quit dashboard and kill the buffer."
+  (interactive)
+  (kill-buffer (current-buffer)))
+
+(defun claude-dashboard-create-and-close ()
+  "Create a new workspace and close the dashboard."
+  (interactive)
+  (claude-dashboard--kill-and-switch #'claude-create-workspace))
 
 ;; Evil bindings for dashboard
 (with-eval-after-load 'evil
@@ -77,12 +109,12 @@
                 (evil-local-set-key 'normal (kbd "j") #'claude-dashboard-next)
                 (evil-local-set-key 'normal (kbd "k") #'claude-dashboard-prev)
                 (evil-local-set-key 'normal (kbd "RET") #'claude-dashboard-select)
-                (evil-local-set-key 'normal (kbd "c") #'claude-create-workspace)
+                (evil-local-set-key 'normal (kbd "c") #'claude-dashboard-create-and-close)
                 (evil-local-set-key 'normal (kbd "x") #'claude-dashboard-close)
                 (evil-local-set-key 'normal (kbd "r") #'claude-dashboard-repair)
                 (evil-local-set-key 'normal (kbd "g") #'claude-dashboard-refresh)
                 (evil-local-set-key 'normal (kbd "/") #'claude-dashboard-filter)
-                (evil-local-set-key 'normal (kbd "q") #'quit-window)))))
+                (evil-local-set-key 'normal (kbd "q") #'claude-dashboard-quit)))))
 
 ;;; Workspace Data Collection
 
@@ -159,20 +191,24 @@ Returns list of plists with :name :repo :branch :status :attention :is-home :pha
                  (display-name (if is-home
                                    (format "⌂ %s" (plist-get ws :repo))
                                  (format "  %s" (plist-get ws :name)))))
-            (insert (propertize (format "%s " symbol)
-                                'face (if (and (eq status 'active) attention)
-                                          'claude-attention-face
-                                        (or face 'claude-idle-face)))
-                    (propertize display-name 'face face
-                                'claude-workspace (plist-get ws :name))
-                    ;; Show phase if present
-                    (propertize phase-str 'face 'font-lock-type-face)
-                    ;; Show status for non-active
-                    (if (eq status 'active)
-                        ""
-                      (propertize (format " [%s]" status)
-                                  'face 'font-lock-comment-face))
-                    "\n")))
+            ;; Build the line content
+            (let ((line-start (point)))
+              (insert (propertize (format "%s " symbol)
+                                  'face (if (and (eq status 'active) attention)
+                                            'claude-attention-face
+                                          (or face 'claude-idle-face)))
+                      (propertize display-name 'face face)
+                      ;; Show phase if present
+                      (propertize phase-str 'face 'font-lock-type-face)
+                      ;; Show status for non-active
+                      (if (eq status 'active)
+                          ""
+                        (propertize (format " [%s]" status)
+                                    'face 'font-lock-comment-face))
+                      "\n")
+              ;; Apply workspace property to entire line for navigation
+              (put-text-property line-start (point) 'claude-workspace
+                                 (plist-get ws :name)))))
       (insert (propertize "No Claude workspaces active.\n"
                           'face 'font-lock-comment-face)
               "\nPress 'c' to create a new workspace."))
@@ -218,16 +254,14 @@ Returns list of plists with :name :repo :branch :status :attention :is-home :pha
     (forward-line -1)))
 
 (defun claude-dashboard-select ()
-  "Jump to workspace under cursor."
+  "Jump to workspace under cursor and close dashboard."
   (interactive)
   (when-let ((ws (claude-dashboard--current-workspace)))
     (let* ((parsed (claude--parse-workspace-name ws))
            (metadata (and parsed (claude-metadata-read (car parsed) (cdr parsed))))
            (status (and metadata (plist-get metadata :status))))
       (if (equal status "active")
-          (progn
-            (claude-workspace-switch ws)
-            (quit-window))
+          (claude-dashboard--kill-and-switch #'claude-workspace-switch ws)
         (message "Cannot switch to %s workspace. Status: %s" ws status)))))
 
 (defun claude-dashboard-close ()

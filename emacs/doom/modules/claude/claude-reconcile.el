@@ -38,10 +38,13 @@ Two minutes allows for slow git operations on large repos."
 
 (defun claude--check-worktree (metadata)
   "Return t if worktree exists and is valid.
-Home workspaces (no worktree) always return t."
+Home workspaces check that parent_repo is accessible."
   (let ((path (plist-get metadata :worktree_path)))
     (if (null path)
-        t  ; Home workspace - no worktree needed
+        ;; Home workspace - verify parent_repo is accessible
+        (let ((parent (plist-get metadata :parent_repo)))
+          (and parent (file-directory-p parent)))
+      ;; Worktree workspace - verify worktree exists
       (and (file-directory-p path)
            (file-exists-p (expand-file-name ".git" path))))))
 
@@ -306,20 +309,31 @@ Called when workspace is in closing state with cleanup_progress."
 ;;; Startup Reconciliation
 
 (defun claude--startup-reconcile ()
-  "Reconcile all workspaces at Emacs startup."
-  ;; First check for stalled creations
-  (claude--check-stalled-creations)
-  ;; Then recover any in-flight operations
-  (claude--recover-in-flight-workspaces)
-  ;; Then reconcile all active workspaces
+  "Reconcile all workspaces at Emacs startup.
+Handles errors gracefully so one bad workspace doesn't break startup."
+  (condition-case err
+      (progn
+        ;; First check for stalled creations
+        (claude--check-stalled-creations)
+        ;; Then recover any in-flight operations
+        (claude--recover-in-flight-workspaces))
+    (error
+     (message "Claude startup recovery error: %s" (error-message-string err))))
+  ;; Then reconcile all active workspaces (each one wrapped in error handling)
   (dolist (metadata (claude--list-all-metadata))
-    (let ((status (plist-get metadata :status)))
-      (when (equal status "active")
-        (let ((result (claude--reconcile-safe metadata)))
-          (when (eq result 'broken)
-            (message "Claude workspace %s:%s is broken (worktree missing)"
-                     (plist-get metadata :repo_name)
-                     (plist-get metadata :branch_name))))))))
+    (condition-case err
+        (let ((status (plist-get metadata :status)))
+          (when (equal status "active")
+            (let ((result (claude--reconcile-safe metadata)))
+              (when (eq result 'broken)
+                (message "Claude workspace %s:%s is broken (project inaccessible)"
+                         (plist-get metadata :repo_name)
+                         (plist-get metadata :branch_name))))))
+      (error
+       (message "Claude reconcile error for %s:%s: %s"
+                (plist-get metadata :repo_name)
+                (plist-get metadata :branch_name)
+                (error-message-string err))))))
 
 ;; Hook for startup reconciliation
 ;; Note: This will be added in claude.el to ensure proper load order
