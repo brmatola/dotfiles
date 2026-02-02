@@ -8,7 +8,7 @@
 
 ## Skills Available
 
-The skills in `~/.claude/skills/` are loaded automatically when relevant:
+Skills in `~/.claude/skills/` are loaded automatically when relevant:
 
 - `test-driven-development` - TDD workflow (red-green-refactor)
 - `systematic-debugging` - Four-phase debugging framework
@@ -22,157 +22,57 @@ Use these via the Task tool for delegation:
 - `sonnet-general-purpose` - Balanced tasks (analysis, implementation)
 - `opus-general-purpose` - Complex reasoning tasks
 
-## How to Expand
-
-Add more skills: Copy SKILL.md files to `~/.claude/skills/<name>/SKILL.md`
-Add more agents: Copy .md files to `~/.claude/agents/<name>.md`
-Add hooks: Configure in `~/.claude/settings.json`
-
 ---
 
-## Doom Emacs Multi-Claude Workflow
+## Worktree Development
 
-A system for managing multiple Claude Code sessions in parallel across different repos and worktrees.
+Sessions run in either the **main repository** or an **isolated worktree**.
 
-### Concept
+### Detecting Your Environment
 
-Each Claude session gets its own isolated git worktree and Doom workspace. A monitor watches all sessions and alerts you when any Claude needs input. A dashboard gives you a bird's-eye view of all active work.
+Check for Emacs-managed worktree metadata:
 
-### Home Workspace
+```bash
+REPO=$(basename "$(git rev-parse --show-toplevel)")
+BRANCH=$(git branch --show-current)
+METADATA="$HOME/worktrees/metadata/$REPO/$BRANCH.json"
 
-A "home workspace" is a Claude session in the main repository (not a worktree). Use it for:
-- Planning and coordination across worktree branches
-- Pushing updates to main branch
-- Running dev servers and experiments
-- Managing worktree branches via magit
-
-**Usage:**
-- `SPC C h` from any repo opens/creates its home workspace
-- `SPC C h` from a Claude-managed worktree jumps to the parent repo's home
-- Home workspaces show with `⌂` prefix in the dashboard
-- Cleanup (`SPC C x`) warns on uncommitted changes, no merge flow
-
-### Extra Terminals
-
-Spawn additional terminals in any workspace with `SPC C t`. Terminals are numbered (`*term:repo:branch:1*`, `*term:repo:branch:2*`, etc.) and gap numbers are reused (if you close terminal 2, the next `SPC C t` creates terminal 2 again).
-
-### Directory Structure
-
-```
-~/worktrees/
-├── {repo-name}/
-│   └── {branch-name}/           # Git worktree checkout
-└── metadata/
-    └── {repo-name}/
-        └── {branch-name}.json   # Parent branch, timestamps
+if [[ -f "$METADATA" ]]; then
+  echo "In Emacs-managed worktree"
+else
+  echo "In main repository or standalone worktree"
+fi
 ```
 
-### Keybindings
+### Main Repository (Home)
 
-All commands under `SPC C` prefix:
+- Used for planning, coordination, running dev servers
+- Safe to push to remote, create PRs
+- No automatic cleanup—changes persist
 
-| Key | Command | Description |
-|-----|---------|-------------|
-| `SPC C c` | Create workspace | New worktree + workspace + Claude session |
-| `SPC C d` | Dashboard | See all sessions, status, navigate |
-| `SPC C h` | Home workspace | Jump to/create home workspace for current repo |
-| `SPC C j` | Jump to Claude | Focus Claude buffer in current workspace |
-| `SPC C t` | New terminal | Spawn extra terminal in current workspace |
-| `SPC C x` | Close workspace | Merge-aware cleanup with confirmation |
-| `SPC C m` | Toggle monitor | Start/stop attention detection |
-| `SPC C g` | Magit status | Open magit in current workspace |
+### Emacs-Managed Worktree
 
-### Dashboard Keys
+- Isolated branch for focused work
+- Located at `~/worktrees/{repo}/{branch}/`
+- Metadata at `~/worktrees/metadata/{repo}/{branch}.json`
+- **Do not merge or push directly**—report readiness and let the user handle integration via Emacs
+- Worktree will be cleaned up when user closes the workspace
 
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate up/down |
-| `RET` | Jump to workspace |
-| `c` | Create new workspace |
-| `x` | Close workspace (with merge check) |
-| `g` | Refresh |
-| `/` | Filter by repo |
-| `q` | Quit |
+### Metadata Schema
 
-### Workflow
-
-**Starting work:**
-1. Open any file in the repo you want to work on
-2. `SPC C c` to create a new workspace
-3. Enter branch name when prompted
-4. Claude session starts automatically in the new worktree
-
-**Monitoring:**
-- Modeline shows "Claude" indicator when any session needs attention
-- Click indicator (or `SPC C d`) to jump to the needy session
-
-**Finishing work:**
-1. `SPC C x` to close the workspace
-2. Review merge status (commits ahead/behind parent)
-3. Choose: `[m]erge & cleanup`, `[d]elete`, `[v]iew diff`, or `[c]ancel`
-4. Merge option: merges to parent branch, removes worktree, cleans up
-
-### Modeline Status
-
-The modeline shows Claude session status globally:
-
-| Display | Meaning |
-|---------|---------|
-| (hidden) | No Claude sessions active |
-| `○ Claude` | Sessions active, none need attention |
-| `● Claude` | At least one session waiting for input |
-
-Click the modeline indicator to jump to the first session needing attention.
-
-### Troubleshooting
-
-**"claude: command not found"**
-- Run `npm install -g @anthropic-ai/claude-code`
-- Or re-run `~/dotfiles/install.sh`
-
-**"Not in a git repository"**
-- `SPC C c` requires being in a git repo
-- Navigate to any file in a repo first
-
-**"Branch already exists"**
-- Choose to reuse the existing branch or enter a different name
-
-**Workspace not appearing in dashboard**
-- Ensure the workspace was created with `SPC C c`, not manually
-- Check `~/worktrees/metadata/` for the JSON file
-
-**Monitor not detecting attention**
-- Toggle monitor: `SPC C m` twice
-- Patterns are checked after 3s of no output
-- Check `claude-attention-patterns` variable for pattern list
-
-**Merge conflicts during cleanup**
-- Use `[v]iew diff` to see changes in magit
-- Resolve conflicts in magit, then try cleanup again
-
-### Files
-
-The module lives in `~/.config/doom/modules/claude/`:
-
-- `claude.el` - Entry point, keybindings, customization
-- `claude-worktree.el` - Git worktree and metadata operations
-- `claude-workspace.el` - Doom workspace management, vterm sessions
-- `claude-monitor.el` - Attention detection, modeline segment
-- `claude-dashboard.el` - Dashboard buffer UI
-- `claude-cleanup.el` - Merge-aware cleanup workflow
-
-### Customization
-
-```elisp
-;; Change worktree location (default: ~/worktrees)
-(setq claude-worktree-dir "~/my-worktrees")
-
-;; Change attention check interval (default: 2 seconds)
-(setq claude-monitor-interval 3)
-
-;; Change idle threshold before checking patterns (default: 3 seconds)
-(setq claude-attention-idle-threshold 5)
-
-;; Add custom attention patterns
-(add-to-list 'claude-attention-patterns "Your pattern here")
+```json
+{
+  "version": 1,
+  "status": "active",
+  "parent_branch": "main",
+  "worktree_path": "~/worktrees/repo/feature",
+  "created_at": "2026-02-01T10:00:00Z",
+  "workflow": {
+    "plan": "plan-name",
+    "phase": "implement",
+    "started": "2026-02-01T10:00:00Z"
+  }
+}
 ```
+
+The `workflow` key is optional—present when running a structured workflow.
