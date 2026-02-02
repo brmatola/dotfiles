@@ -135,11 +135,12 @@ Performs rollback of UI components on failure."
        (signal (car err) (cdr err))))))
 
 (defun claude--create-worktree-workspace (repo-path branch-name parent-branch)
-  "Create a new worktree-based workspace.
+  "Finish workspace setup after worktree already created.
 REPO-PATH is the parent repository.
-BRANCH-NAME is the new branch to create.
-PARENT-BRANCH is the branch to create from.
-Returns workspace name on success, signals error on failure."
+BRANCH-NAME is the branch (worktree already exists).
+PARENT-BRANCH is the branch it was created from.
+Returns workspace name on success, signals error on failure.
+Note: Caller must have already created the git worktree."
   (let* ((repo-name (claude--repo-name repo-path))
          (worktree-path (claude--worktree-path repo-name branch-name)))
     ;; Check for collision
@@ -148,10 +149,9 @@ Returns workspace name on success, signals error on failure."
     (claude--create-metadata repo-name branch-name parent-branch repo-path "worktree")
     (condition-case err
         (progn
-          ;; Create git worktree
-          (let ((result (claude-worktree-create repo-path branch-name parent-branch)))
-            (unless (car result)
-              (error "Worktree creation failed: %s" (cdr result))))
+          ;; Verify worktree exists (caller should have created it)
+          (unless (file-directory-p worktree-path)
+            (error "Worktree not found at %s" worktree-path))
           ;; Create UI components
           (claude--create-workspace-ui repo-name branch-name worktree-path)
           ;; Mark as active
