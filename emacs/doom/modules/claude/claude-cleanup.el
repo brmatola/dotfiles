@@ -32,6 +32,7 @@
   (let ((map (make-sparse-keymap)))
     (define-key map "v" #'claude-cleanup-view-diff)
     (define-key map "m" #'claude-cleanup-merge)
+    (define-key map "p" #'claude-cleanup-push-pr)
     (define-key map "d" #'claude-cleanup-delete)
     (define-key map "c" #'claude-cleanup-cancel)
     (define-key map "q" #'claude-cleanup-cancel)
@@ -50,6 +51,7 @@
               (when (fboundp 'evil-local-set-key)
                 (evil-local-set-key 'normal (kbd "v") #'claude-cleanup-view-diff)
                 (evil-local-set-key 'normal (kbd "m") #'claude-cleanup-merge)
+                (evil-local-set-key 'normal (kbd "p") #'claude-cleanup-push-pr)
                 (evil-local-set-key 'normal (kbd "d") #'claude-cleanup-delete)
                 (evil-local-set-key 'normal (kbd "c") #'claude-cleanup-cancel)
                 (evil-local-set-key 'normal (kbd "q") #'claude-cleanup-cancel)
@@ -124,6 +126,9 @@ Checks for uncommitted changes and prompts if dirty."
   (let* ((metadata (claude-metadata-read repo-name branch-name))
          (worktree-path (plist-get metadata :worktree_path))
          (parent-branch (plist-get metadata :parent_branch))
+         (workflow-phase (claude--workflow-phase repo-name branch-name))
+         (workflow (plist-get metadata :workflow))
+         (workflow-plan (and workflow (plist-get workflow :plan)))
          (commits-ahead (if (and worktree-path (file-directory-p worktree-path))
                             (claude-git-commits-ahead worktree-path parent-branch)
                           0))
@@ -149,6 +154,12 @@ Checks for uncommitted changes and prompts if dirty."
                   "\n"
                   (format "Workspace: %s:%s\n" repo-name branch-name)
                   (format "Parent: %s\n" (or parent-branch "unknown"))
+                  ;; Show workflow info if present
+                  (if workflow-phase
+                      (format "Workflow: %s (phase: %s)\n"
+                              (or workflow-plan "unknown")
+                              workflow-phase)
+                    "")
                   (format "Status: %s\n"
                           (cond
                            ((< commits-ahead 0) "Unknown (couldn't read git status)")
@@ -162,6 +173,8 @@ Checks for uncommitted changes and prompts if dirty."
                   (if (< commits-ahead 0)
                       " Merge & cleanup (may fail)\n"
                     " Merge & cleanup\n")
+                  (propertize "[p]" 'face 'font-lock-keyword-face)
+                  " Push & create PR\n"
                   (propertize "[d]" 'face 'font-lock-keyword-face)
                   (cond
                    ((< commits-ahead 0) " Delete (status unknown)\n")
@@ -216,6 +229,31 @@ Checks for uncommitted changes and prompts if dirty."
                 (yes-or-no-p (format "Delete %d unmerged commits? " commits-ahead)))
         (claude-cleanup--do-cleanup info)
         (message "Workspace deleted")))))
+
+(defun claude-cleanup-push-pr ()
+  "Push branch and create PR."
+  (interactive)
+  (when-let* ((info claude-cleanup--workspace-info)
+              (branch-name (plist-get info :branch-name))
+              (worktree-path (plist-get info :worktree-path)))
+    (if (not (and worktree-path (file-directory-p worktree-path)))
+        (user-error "Worktree path not found")
+      (let ((default-directory worktree-path))
+        ;; Push
+        (message "Pushing %s to origin..." branch-name)
+        (let ((push-result (shell-command-to-string
+                            (format "git push -u origin %s 2>&1" branch-name))))
+          (if (string-match-p "error\\|fatal" push-result)
+              (user-error "Push failed: %s" push-result)
+            ;; Create PR
+            (message "Creating PR...")
+            (let ((pr-result (shell-command-to-string "gh pr create --fill 2>&1")))
+              (if (string-match-p "error\\|fatal" pr-result)
+                  (user-error "PR creation failed: %s" pr-result)
+                ;; Success - close status buffer but keep worktree
+                (when-let ((buffer (get-buffer "*Claude Cleanup*")))
+                  (quit-window t (get-buffer-window buffer)))
+                (message "PR created for %s" branch-name)))))))))
 
 (defun claude-cleanup-cancel ()
   "Cancel cleanup."

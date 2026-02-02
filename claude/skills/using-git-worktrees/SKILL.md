@@ -13,6 +13,24 @@ Git worktrees create isolated workspaces sharing the same repository, allowing w
 
 **Announce at start:** "I'm using the using-git-worktrees skill to set up an isolated workspace."
 
+## Emacs Worktree Detection
+
+Before any directory selection, check if already in an Emacs-managed worktree:
+
+```bash
+REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || echo unknown)")
+BRANCH=$(git branch --show-current)
+METADATA="$HOME/worktrees/metadata/$REPO/$BRANCH.json"
+
+if [[ -f "$METADATA" ]]; then
+  echo "Already in Emacs-managed worktree at $(pwd)"
+  echo "Skipping worktree creation."
+  # Proceed directly to project setup and baseline verification
+fi
+```
+
+If metadata exists, skip to "Run Project Setup" section - no new worktree needed.
+
 ## Directory Selection Process
 
 Follow this priority order:

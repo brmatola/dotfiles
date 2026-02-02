@@ -54,14 +54,41 @@ audit → [implementation-review] → markdown summary
 
 ### State File Location
 
-```bash
-# State stored in .workflow-state.json (repo root)
+Check for Emacs metadata first:
 
-# Ensure state file is gitignored (workflow state is session-specific)
-if ! grep -q ".workflow-state.json" .gitignore 2>/dev/null; then
-  echo ".workflow-state.json" >> .gitignore
+```bash
+REPO=$(basename "$(git rev-parse --show-toplevel)")
+BRANCH=$(git branch --show-current)
+EMACS_METADATA="$HOME/worktrees/metadata/$REPO/$BRANCH.json"
+
+if [[ -f "$EMACS_METADATA" ]]; then
+  # Use Emacs metadata - read/write workflow as nested key
+  # Read:  jq -r '.workflow // empty' "$EMACS_METADATA"
+  # Write: Use Read tool, modify plist, use Write tool
+  STATE_LOCATION="emacs"
+else
+  # Fallback for non-Emacs sessions
+  STATE_LOCATION=".workflow-state.json"
+  # Ensure state file is gitignored (workflow state is session-specific)
+  if ! grep -q ".workflow-state.json" .gitignore 2>/dev/null; then
+    echo ".workflow-state.json" >> .gitignore
+  fi
 fi
 ```
+
+**Emacs metadata workflow key:**
+```json
+{
+  "workflow": {
+    "plan": "plan-name",
+    "phase": "review",
+    "started": "2026-02-01T10:00:00Z",
+    "history": []
+  }
+}
+```
+
+When writing to Emacs metadata, merge the workflow key into existing JSON (don't overwrite other fields).
 
 ### State Schema
 

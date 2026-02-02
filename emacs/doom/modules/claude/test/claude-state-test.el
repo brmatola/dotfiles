@@ -317,5 +317,38 @@
             (should (null (plist-get meta :parent_branch)))))
       (delete-directory claude-metadata-dir t))))
 
+;;; Workflow Phase Tests
+
+(ert-deftest claude-state-test-workflow-phase-nil-when-no-workflow ()
+  "Test that workflow phase returns nil when no workflow in metadata."
+  (let ((claude-metadata-dir (make-temp-file "claude-test-meta" t)))
+    (unwind-protect
+        (progn
+          (claude-metadata-write "repo" "feature"
+                                 '(:version 1 :status "active"))
+          (should (null (claude--workflow-phase "repo" "feature"))))
+      (delete-directory claude-metadata-dir t))))
+
+(ert-deftest claude-state-test-workflow-phase-returns-phase ()
+  "Test that workflow phase returns phase when workflow present."
+  (let ((claude-metadata-dir (make-temp-file "claude-test-meta" t)))
+    (unwind-protect
+        (progn
+          (claude-metadata-write "repo" "feature"
+                                 '(:version 1
+                                   :status "active"
+                                   :workflow (:plan "test-plan"
+                                              :phase "implement"
+                                              :started "2026-02-01T10:00:00Z")))
+          (should (equal (claude--workflow-phase "repo" "feature") "implement")))
+      (delete-directory claude-metadata-dir t))))
+
+(ert-deftest claude-state-test-workflow-phase-nil-for-nonexistent ()
+  "Test that workflow phase returns nil for nonexistent workspace."
+  (let ((claude-metadata-dir (make-temp-file "claude-test-meta" t)))
+    (unwind-protect
+        (should (null (claude--workflow-phase "nonexistent" "nope")))
+      (delete-directory claude-metadata-dir t))))
+
 (provide 'claude-state-test)
 ;;; claude-state-test.el ends here

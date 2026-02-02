@@ -63,9 +63,43 @@ Which option?
 
 **Don't add explanation** - keep options concise.
 
-### Step 4: Execute Choice
+### Step 4: Check Environment and Execute
 
-#### Option 1: Merge Locally
+**First, check if in Emacs-managed worktree:**
+
+```bash
+REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || echo unknown)")
+BRANCH=$(git branch --show-current)
+METADATA="$HOME/worktrees/metadata/$REPO/$BRANCH.json"
+```
+
+#### If in Emacs-managed worktree (metadata file exists)
+
+Report readiness and hand off to Emacs:
+
+```
+Branch ready for integration.
+
+Tests: passing
+Base: <base-branch>
+Ahead: <N> commits
+Conflicts: none detected
+
+Use SPC C x in Emacs to complete:
+- [m] Merge & cleanup
+- [p] Push & create PR
+- [d] Discard
+
+Branch is prepared. Awaiting your choice in Emacs.
+```
+
+**Stop here.** Do not execute merge/push/delete in Emacs-managed worktrees.
+
+#### If NOT in Emacs worktree (no metadata file)
+
+Execute the user's choice directly:
+
+**Option 1: Merge Locally**
 
 ```bash
 # Switch to base branch
@@ -86,7 +120,7 @@ git branch -d <feature-branch>
 
 Then: Cleanup worktree (Step 5)
 
-#### Option 2: Push and Create PR
+**Option 2: Push and Create PR**
 
 ```bash
 # Push branch
@@ -105,13 +139,13 @@ EOF
 
 Then: Cleanup worktree (Step 5)
 
-#### Option 3: Keep As-Is
+**Option 3: Keep As-Is**
 
 Report: "Keeping branch <name>. Worktree preserved at <path>."
 
 **Don't cleanup worktree.**
 
-#### Option 4: Discard
+**Option 4: Discard**
 
 **Confirm first:**
 ```

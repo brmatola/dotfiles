@@ -88,7 +88,7 @@
 
 (defun claude-dashboard--get-workspaces ()
   "Get list of workspace data for display.
-Returns list of plists with :name :repo :branch :status :attention :is-home."
+Returns list of plists with :name :repo :branch :status :attention :is-home :phase."
   (let ((result nil))
     (dolist (ws (claude--list-all-workspaces))
       (let* ((repo-name (car ws))
@@ -100,7 +100,8 @@ Returns list of plists with :name :repo :branch :status :attention :is-home."
              (buffer (get-buffer buffer-name))
              (attention (and buffer
                              (buffer-local-value 'claude--needs-attention buffer)))
-             (is-home (claude--home-workspace-p metadata)))
+             (is-home (claude--home-workspace-p metadata))
+             (phase (claude--workflow-phase repo-name branch-name)))
         ;; Apply filter if set
         (when (or (null claude-dashboard-filter)
                   (string= claude-dashboard-filter repo-name))
@@ -109,7 +110,8 @@ Returns list of plists with :name :repo :branch :status :attention :is-home."
                       :branch branch-name
                       :status (intern status)
                       :attention attention
-                      :is-home is-home)
+                      :is-home is-home
+                      :phase phase)
                 result))))
     ;; Sort: home workspaces first, then by name
     (sort result
@@ -141,6 +143,8 @@ Returns list of plists with :name :repo :branch :status :attention :is-home."
           (let* ((status (plist-get ws :status))
                  (attention (plist-get ws :attention))
                  (is-home (plist-get ws :is-home))
+                 (phase (plist-get ws :phase))
+                 (phase-str (if phase (format " [%s]" phase) ""))
                  (symbol (cdr (assq status claude-dashboard--state-symbols)))
                  (face (cdr (assq status claude-dashboard--state-faces)))
                  ;; Override face for active with attention
@@ -161,6 +165,8 @@ Returns list of plists with :name :repo :branch :status :attention :is-home."
                                         (or face 'claude-idle-face)))
                     (propertize display-name 'face face
                                 'claude-workspace (plist-get ws :name))
+                    ;; Show phase if present
+                    (propertize phase-str 'face 'font-lock-type-face)
                     ;; Show status for non-active
                     (if (eq status 'active)
                         ""

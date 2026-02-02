@@ -361,5 +361,13 @@ TYPE is \"worktree\" (default) or \"home\"."
     (or (plist-get metadata :worktree_path)
         (plist-get metadata :parent_repo))))
 
+;;; Workflow Integration
+
+(defun claude--workflow-phase (repo-name branch-name)
+  "Get workflow phase for REPO-NAME/BRANCH-NAME, or nil if no workflow."
+  (when-let* ((metadata (claude-metadata-read repo-name branch-name))
+              (workflow (plist-get metadata :workflow)))
+    (plist-get workflow :phase)))
+
 (provide 'claude-state)
 ;;; claude-state.el ends here
