@@ -39,6 +39,7 @@ brew "watchman"
 brew "wget"
 brew "wix/brew/applesimutils"
 brew "yarn"
+brew "gh"
 
 # Applications
 cask "bruno"
