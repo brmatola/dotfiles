@@ -162,7 +162,8 @@ Returns list of plists with :name :repo :branch :status :attention :is-home."
                     (propertize display-name 'face face
                                 'claude-workspace (plist-get ws :name))
                     ;; Show status for non-active
-                    (unless (eq status 'active)
+                    (if (eq status 'active)
+                        ""
                       (propertize (format " [%s]" status)
                                   'face 'font-lock-comment-face))
                     "\n")))
