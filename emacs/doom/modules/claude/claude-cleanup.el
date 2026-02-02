@@ -213,9 +213,8 @@ Checks for uncommitted changes and prompts if dirty."
                                                parent-branch
                                                branch-name)))
           (if (car result)
-              (progn
-                (claude-cleanup--do-cleanup info)
-                (message "Merged and cleaned up successfully"))
+              ;; Merge succeeded - cleanup runs async
+              (claude-cleanup--do-cleanup info)
             (if (eq (cdr result) 'conflict)
                 (user-error "Merge conflicts detected. Resolve in magit, then try again")
               (user-error "Merge failed: %s" (cdr result)))))))))
@@ -227,8 +226,8 @@ Checks for uncommitted changes and prompts if dirty."
     (let ((commits-ahead (plist-get info :commits-ahead)))
       (when (or (<= commits-ahead 0)
                 (yes-or-no-p (format "Delete %d unmerged commits? " commits-ahead)))
-        (claude-cleanup--do-cleanup info)
-        (message "Workspace deleted")))))
+        ;; Cleanup runs async - message is shown by do-cleanup
+        (claude-cleanup--do-cleanup info)))))
 
 (defun claude-cleanup-push-pr ()
   "Push branch and create PR."
@@ -264,7 +263,7 @@ Checks for uncommitted changes and prompts if dirty."
 
 (defun claude-cleanup--do-cleanup (info)
   "Perform actual cleanup steps for INFO.
-Uses status tracking for crash recovery."
+UI cleanup is sync, git operations run async in background."
   (let* ((repo-name (plist-get info :repo-name))
          (branch-name (plist-get info :branch-name))
          (parent-repo (plist-get info :parent-repo))
@@ -278,13 +277,11 @@ Uses status tracking for crash recovery."
     (when-let ((buffer (get-buffer "*Claude Cleanup*")))
       (kill-buffer buffer))
 
-    (message "Cleaning up %s..." workspace-name)
-    (redisplay)
-
     (condition-case err
         (progn
+          ;; === SYNC PART: UI cleanup (fast) ===
+
           ;; 1. Switch away from this workspace before deleting it
-          (message "Cleaning up %s... switching workspace" workspace-name)
           (when (equal (+workspace-current-name) workspace-name)
             (let ((other-workspaces (remove workspace-name (+workspace-list-names))))
               (if other-workspaces
@@ -292,43 +289,56 @@ Uses status tracking for crash recovery."
                 (+workspace/switch-to "+workspace--last"))))
 
           ;; 2. Kill all buffers
-          (message "Cleaning up %s... killing buffers" workspace-name)
-          (redisplay)
           (claude--kill-workspace-buffers repo-name branch-name)
           (claude--mark-cleanup-step repo-name branch-name :buffers_killed)
 
           ;; 3. Kill Doom workspace
-          (message "Cleaning up %s... removing workspace" workspace-name)
-          (redisplay)
           (ignore-errors (+workspace-kill workspace-name))
           (claude--mark-cleanup-step repo-name branch-name :workspace_removed)
 
-          ;; 4. Remove git worktree
-          (message "Cleaning up %s... removing worktree" workspace-name)
-          (redisplay)
-          (claude-worktree-remove repo-name branch-name)
-          (claude--mark-cleanup-step repo-name branch-name :worktree_removed)
+          ;; === ASYNC PART: Git cleanup (slow) ===
+          ;; Run in background so UI stays responsive
+          (claude-cleanup--async-git-cleanup info)
 
-          ;; 5. Delete branch from parent repo
-          (when parent-repo
-            (message "Cleaning up %s... deleting branch" workspace-name)
-            (redisplay)
-            (ignore-errors (claude-git-delete-branch parent-repo branch-name)))
-          (claude--mark-cleanup-step repo-name branch-name :branch_deleted)
-
-          ;; 6. Delete metadata
-          (claude-metadata-delete repo-name branch-name)
-
-          ;; 7. Stop monitor if no more workspaces
-          (when (null (claude-workspace-list))
-            (claude-monitor-stop))
-
-          (message "Workspace %s cleaned up" workspace-name))
+          (message "Closing %s (cleanup running in background)" workspace-name))
       (error
        ;; Mark as stuck for manual intervention
        (claude--update-status repo-name branch-name "stuck")
-       (user-error "Cleanup failed at step. Workspace marked stuck: %s"
-                   (error-message-string err))))))
+       (user-error "Cleanup failed: %s" (error-message-string err))))))
+
+(defun claude-cleanup--async-git-cleanup (info)
+  "Run git cleanup operations asynchronously for INFO."
+  (let* ((repo-name (plist-get info :repo-name))
+         (branch-name (plist-get info :branch-name))
+         (parent-repo (plist-get info :parent-repo))
+         (worktree-path (plist-get info :worktree-path))
+         (workspace-name (claude--workspace-name repo-name branch-name)))
+    ;; Build the shell command to run all git operations
+    (let* ((worktree-cmd (when worktree-path
+                           (format "cd %s && git worktree remove --force %s 2>/dev/null || true"
+                                   (shell-quote-argument parent-repo)
+                                   (shell-quote-argument worktree-path))))
+           (branch-cmd (when parent-repo
+                         (format "cd %s && git branch -d %s 2>/dev/null || git branch -D %s 2>/dev/null || true"
+                                 (shell-quote-argument parent-repo)
+                                 (shell-quote-argument branch-name)
+                                 (shell-quote-argument branch-name))))
+           (full-cmd (string-join (delq nil (list worktree-cmd branch-cmd)) " && ")))
+      (when (and full-cmd (not (string-empty-p full-cmd)))
+        (make-process
+         :name (format "claude-cleanup-%s" workspace-name)
+         :buffer nil
+         :command (list "sh" "-c" full-cmd)
+         :sentinel (lambda (proc event)
+                     (when (string-match-p "finished" event)
+                       ;; Mark steps complete and finalize
+                       (claude--mark-cleanup-step repo-name branch-name :worktree_removed)
+                       (claude--mark-cleanup-step repo-name branch-name :branch_deleted)
+                       (claude-metadata-delete repo-name branch-name)
+                       ;; Stop monitor if no more workspaces
+                       (when (null (claude-workspace-list))
+                         (claude-monitor-stop))
+                       (message "Cleanup complete: %s" workspace-name)))))))))
 
 ;;; Cleanup Progress Tracking
 
