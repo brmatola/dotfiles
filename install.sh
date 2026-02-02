@@ -76,6 +76,14 @@ create_symlink "$DOTFILES_DIR/claude/settings.json" "$HOME/.claude/settings.json
 if [ -d "$DOTFILES_DIR/claude/skills" ] && [ "$(ls -A "$DOTFILES_DIR/claude/skills" 2>/dev/null)" ]; then
     create_symlink "$DOTFILES_DIR/claude/skills" "$HOME/.claude/skills"
 fi
+# Only link agents if directory has content
+if [ -d "$DOTFILES_DIR/claude/agents" ] && [ "$(ls -A "$DOTFILES_DIR/claude/agents" 2>/dev/null)" ]; then
+    create_symlink "$DOTFILES_DIR/claude/agents" "$HOME/.claude/agents"
+fi
+# Only link commands if directory has content
+if [ -d "$DOTFILES_DIR/claude/commands" ] && [ "$(ls -A "$DOTFILES_DIR/claude/commands" 2>/dev/null)" ]; then
+    create_symlink "$DOTFILES_DIR/claude/commands" "$HOME/.claude/commands"
+fi
 
 ###############################################################################
 # Claude Code CLI                                                             #

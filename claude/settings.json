@@ -9,9 +9,7 @@
       "Bash(npm run:*)"
     ]
   },
-  "enabledPlugins": {
-    "gremlins@gremlins-dev": true
-  },
+  "enabledPlugins": {},
   "preferences": {
     "preferredNotifChannel": "notifications_disabled"
   }
