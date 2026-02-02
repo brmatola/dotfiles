@@ -102,7 +102,7 @@ Mock git/doom/vterm, test reconciliation logic.
 (defvar claude-test--mock-buffers nil)
 
 (defun claude-test--mock-check-worktree (metadata)
-  (member (alist-get 'worktree_path metadata) claude-test--mock-worktrees))
+  (member (plist-get metadata :worktree_path) claude-test--mock-worktrees))
 
 (defun claude-test--mock-check-doom (metadata)
   (member (claude--workspace-name metadata) claude-test--mock-workspaces))
@@ -118,10 +118,10 @@ Mock git/doom/vterm, test reconciliation logic.
   (let ((claude-test--mock-worktrees '("/tmp/worktrees/repo/branch"))
         (claude-test--mock-workspaces '("repo:branch"))
         (claude-test--mock-buffers '("*claude:repo:branch*"))
-        (metadata '((status . "active")
-                    (worktree_path . "/tmp/worktrees/repo/branch")
-                    (repo_name . "repo")
-                    (branch_name . "branch"))))
+        (metadata '(:status "active"
+                    :worktree_path "/tmp/worktrees/repo/branch"
+                    :repo_name "repo"
+                    :branch_name "branch")))
     (cl-letf (((symbol-function 'claude--check-worktree) #'claude-test--mock-check-worktree)
               ((symbol-function 'claude--check-doom-workspace) #'claude-test--mock-check-doom)
               ((symbol-function 'claude--check-vterm-buffer) #'claude-test--mock-check-vterm))
@@ -131,10 +131,10 @@ Mock git/doom/vterm, test reconciliation logic.
   (let ((claude-test--mock-worktrees nil)  ; Worktree missing
         (claude-test--mock-workspaces '("repo:branch"))
         (claude-test--mock-buffers '("*claude:repo:branch*"))
-        (metadata '((status . "active")
-                    (worktree_path . "/tmp/worktrees/repo/branch")
-                    (repo_name . "repo")
-                    (branch_name . "branch"))))
+        (metadata '(:status "active"
+                    :worktree_path "/tmp/worktrees/repo/branch"
+                    :repo_name "repo"
+                    :branch_name "branch")))
     (cl-letf (((symbol-function 'claude--check-worktree) #'claude-test--mock-check-worktree)
               ((symbol-function 'claude--check-doom-workspace) #'claude-test--mock-check-doom)
               ((symbol-function 'claude--check-vterm-buffer) #'claude-test--mock-check-vterm)
@@ -146,10 +146,10 @@ Mock git/doom/vterm, test reconciliation logic.
         (claude-test--mock-worktrees '("/tmp/worktrees/repo/branch"))
         (claude-test--mock-workspaces nil)  ; Workspace missing
         (claude-test--mock-buffers '("*claude:repo:branch*"))
-        (metadata '((status . "active")
-                    (worktree_path . "/tmp/worktrees/repo/branch")
-                    (repo_name . "repo")
-                    (branch_name . "branch"))))
+        (metadata '(:status "active"
+                    :worktree_path "/tmp/worktrees/repo/branch"
+                    :repo_name "repo"
+                    :branch_name "branch")))
     (cl-letf (((symbol-function 'claude--check-worktree) #'claude-test--mock-check-worktree)
               ((symbol-function 'claude--check-doom-workspace) #'claude-test--mock-check-doom)
               ((symbol-function 'claude--check-vterm-buffer) #'claude-test--mock-check-vterm)
@@ -229,7 +229,7 @@ Full flows with real git repos in temp directories.
   ;; Reconcile should detect broken
   (let ((metadata (claude-metadata-read "test-repo" "test-branch")))
     (claude--reconcile metadata)
-    (should (equal (alist-get 'status (claude-metadata-read "test-repo" "test-branch"))
+    (should (equal (plist-get (claude-metadata-read "test-repo" "test-branch") :status)
                    "broken"))))
 
 (claude-integration-test claude-int-test-conflict-handling
@@ -248,7 +248,7 @@ Full flows with real git repos in temp directories.
 
   ;; Attempt close - should go to stuck state
   (claude-close-workspace-noninteractive "test-repo" "test-branch" 'merge)
-  (should (equal (alist-get 'status (claude-metadata-read "test-repo" "test-branch"))
+  (should (equal (plist-get (claude-metadata-read "test-repo" "test-branch") :status)
                  "stuck")))
 ```
 
@@ -319,3 +319,216 @@ echo "=== All tests passed ==="
 | Path utilities | 100% of functions |
 | Reconciler logic | All state combinations |
 | Integration flows | Happy path + key error cases |
+
+## Additional Test Cases
+
+### Concurrent Operations
+
+```elisp
+(claude-integration-test claude-int-test-concurrent-create
+  ;; Start two workspace creations "simultaneously"
+  (let ((ws1-done nil)
+        (ws2-done nil))
+    ;; Note: In practice these run sequentially in Emacs
+    ;; but we test that state doesn't get corrupted
+    (claude-create-workspace-noninteractive test-repo "branch-1" "main")
+    (claude-create-workspace-noninteractive test-repo "branch-2" "main")
+
+    ;; Both should exist and be independent
+    (should (claude-metadata-read "test-repo" "branch-1"))
+    (should (claude-metadata-read "test-repo" "branch-2"))
+    (should (+workspace-exists-p "test-repo:branch-1"))
+    (should (+workspace-exists-p "test-repo:branch-2"))))
+
+(claude-integration-test claude-int-test-close-during-create
+  ;; This shouldn't happen in practice, but test the edge case
+  (let* ((repo-name "test-repo")
+         (branch-name "test-branch"))
+    ;; Manually set metadata to creating state
+    (claude-metadata-write repo-name branch-name
+                           '(:version 1 :status "creating" :type "worktree"))
+
+    ;; Attempting to close should be blocked
+    (should-error (claude-close-workspace-noninteractive repo-name branch-name 'delete)
+                  :type 'user-error)))
+```
+
+### Crash Recovery
+
+```elisp
+(claude-integration-test claude-int-test-crash-during-creation
+  ;; Simulate crash: metadata exists with status=creating, but no worktree
+  (let ((repo-name "test-repo")
+        (branch-name "test-branch"))
+    (claude-metadata-write repo-name branch-name
+                           (list :version 1
+                                 :status "creating"
+                                 :type "worktree"
+                                 :created_at (format-time-string "%Y-%m-%dT%H:%M:%SZ"
+                                                                 (time-subtract nil 120) t)))
+
+    ;; Startup recovery should mark as failed (stalled creation)
+    (claude--check-stalled-creations)
+
+    (should (equal (plist-get (claude-metadata-read repo-name branch-name) :status)
+                   "failed"))))
+
+(claude-integration-test claude-int-test-crash-during-cleanup
+  ;; Simulate crash: metadata has cleanup_progress but status=closing
+  (claude-create-workspace-noninteractive test-repo "test-branch" "main")
+
+  ;; Simulate partial cleanup state
+  (let* ((metadata (claude-metadata-read "test-repo" "test-branch")))
+    (plist-put metadata :status "closing")
+    (plist-put metadata :cleanup_progress
+               '(:buffers_killed t :workspace_removed nil))
+    (claude-metadata-write "test-repo" "test-branch" metadata))
+
+  ;; Recovery should detect and mark stuck
+  (claude--recover-in-flight-workspaces)
+
+  (should (equal (plist-get (claude-metadata-read "test-repo" "test-branch") :status)
+                 "stuck")))
+```
+
+### Migration
+
+```elisp
+(ert-deftest claude-migration-test-v0-to-v1 ()
+  (let* ((temp-dir (make-temp-file "claude-test" t))
+         (claude-metadata-dir temp-dir)
+         (v0-metadata '(:parent_branch "main"
+                        :parent_repo "/tmp/repo"
+                        :created "2026-01-01T00:00:00Z")))
+    (unwind-protect
+        (progn
+          ;; Write v0 format directly
+          (make-directory (expand-file-name "test-repo" temp-dir) t)
+          (with-temp-file (expand-file-name "test-repo/feature.json" temp-dir)
+            (insert (json-encode v0-metadata)))
+
+          ;; Read should trigger migration
+          (let ((migrated (claude-metadata-read "test-repo" "feature")))
+            (should (= (plist-get migrated :version) 1))
+            (should (equal (plist-get migrated :status) "active"))
+            (should (equal (plist-get migrated :type) "worktree"))
+            (should (equal (plist-get migrated :repo_name) "test-repo"))
+            (should (equal (plist-get migrated :branch_name) "feature"))
+            ;; Original fields preserved
+            (should (equal (plist-get migrated :parent_branch) "main"))))
+      (delete-directory temp-dir t))))
+```
+
+### Network Failures
+
+```elisp
+(claude-integration-test claude-int-test-merge-network-failure
+  ;; Create workspace with commits
+  (claude-create-workspace-noninteractive test-repo "test-branch" "main")
+  (let ((default-directory (claude--worktree-path "test-repo" "test-branch")))
+    (write-region "test" nil "file.txt")
+    (shell-command "git add . && git commit -m 'Test'"))
+
+  ;; Mock git push to fail
+  (cl-letf (((symbol-function 'shell-command-to-string)
+             (lambda (cmd)
+               (if (string-match-p "git push" cmd)
+                   "fatal: Could not read from remote repository"
+                 (funcall #'shell-command-to-string cmd)))))
+
+    ;; PR creation should handle gracefully
+    (should-error (claude--create-pr "test-repo" "test-branch"))))
+```
+
+### Repo Collision
+
+```elisp
+(ert-deftest claude-test-repo-name-collision ()
+  (let* ((temp-dir (make-temp-file "claude-test" t))
+         (claude-metadata-dir temp-dir))
+    (unwind-protect
+        (progn
+          ;; Create workspace for repo A
+          (claude-metadata-write "api" "feature"
+                                 (list :parent_repo "/code/company-a/api"))
+
+          ;; Attempting to create for repo B with same name should error
+          (should-error
+           (claude--check-repo-collision "api" "feature" "/code/company-b/api")
+           :type 'user-error))
+      (delete-directory temp-dir t))))
+```
+
+### Performance (Manual)
+
+For large-scale testing, run manually:
+
+```elisp
+(defun claude-test-many-workspaces (n)
+  "Create N workspaces and measure performance."
+  (let ((start-time (current-time)))
+    (dotimes (i n)
+      (claude-metadata-write "perf-repo" (format "branch-%d" i)
+                             (list :version 1 :status "active")))
+
+    ;; Time metadata listing
+    (let ((list-start (current-time)))
+      (claude-worktree-list)
+      (message "List %d workspaces: %.3fs"
+               n (float-time (time-subtract nil list-start))))
+
+    ;; Time reconciliation
+    (let ((reconcile-start (current-time)))
+      (claude--startup-reconcile)
+      (message "Reconcile %d workspaces: %.3fs"
+               n (float-time (time-subtract nil reconcile-start))))
+
+    ;; Cleanup
+    (dotimes (i n)
+      (claude-metadata-delete "perf-repo" (format "branch-%d" i)))
+
+    (message "Total time for %d workspaces: %.3fs"
+             n (float-time (time-subtract nil start-time)))))
+
+;; Target: 100 workspaces should complete in <5s
+```
+
+## Debugging Support
+
+Add test utilities for debugging:
+
+```elisp
+(defun claude-debug-dump-state ()
+  "Dump all Claude state for debugging."
+  (interactive)
+  (with-current-buffer (get-buffer-create "*claude-debug*")
+    (erase-buffer)
+    (insert "=== Claude Debug State ===\n\n")
+
+    (insert "== Metadata Files ==\n")
+    (dolist (ws (claude-worktree-list))
+      (let ((metadata (claude-metadata-read (car ws) (cdr ws))))
+        (insert (format "\n%s:%s\n" (car ws) (cdr ws)))
+        (insert (format "  %S\n" metadata))))
+
+    (insert "\n== Doom Workspaces ==\n")
+    (dolist (ws (+workspace-list-names))
+      (insert (format "  %s\n" ws)))
+
+    (insert "\n== Claude Buffers ==\n")
+    (dolist (buf (buffer-list))
+      (when (string-prefix-p "*claude:" (buffer-name buf))
+        (insert (format "  %s\n" (buffer-name buf)))))
+
+    (insert "\n== Terminal Buffers ==\n")
+    (dolist (buf (buffer-list))
+      (when (string-prefix-p "*term:" (buffer-name buf))
+        (insert (format "  %s\n" (buffer-name buf)))))
+
+    (insert "\n== Attention State ==\n")
+    (maphash (lambda (k v)
+               (insert (format "  %s: %s\n" k v)))
+             claude-monitor--attention-state)
+
+    (pop-to-buffer (current-buffer))))
+```

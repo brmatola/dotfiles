@@ -1,74 +1,34 @@
 ;;; claude-worktree.el --- Git worktree management -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Git worktree operations and metadata management for Claude workspaces.
+;; Git worktree operations for Claude workspaces.
+;; Metadata operations have been moved to claude-state.el.
 
 ;;; Code:
 
-(require 'json)
+(require 'claude-state)
 
 ;; Forward declarations for customizable variables defined in claude.el
 (defvar claude-worktree-dir)
-(defvar claude-metadata-dir)
 
-;;; Path utilities
+;;; Path utilities (re-exported from claude-state for backwards compatibility)
 
-(defun claude-worktree-path (repo-name branch-name)
-  "Return path to worktree for REPO-NAME and BRANCH-NAME."
-  (expand-file-name (format "%s/%s" repo-name branch-name)
-                    (expand-file-name claude-worktree-dir)))
+(defalias 'claude-worktree-path #'claude--worktree-path)
+(defalias 'claude-metadata-path #'claude--metadata-path)
+(defalias 'claude-repo-name #'claude--repo-name)
 
-(defun claude-metadata-path (repo-name branch-name)
-  "Return path to metadata file for REPO-NAME and BRANCH-NAME."
-  (expand-file-name (format "%s/%s.json" repo-name branch-name)
-                    (expand-file-name claude-metadata-dir)))
-
-(defun claude-repo-name (repo-path)
-  "Extract repo name from REPO-PATH.
-Uses the final path component."
-  (file-name-nondirectory (directory-file-name (expand-file-name repo-path))))
-
-;;; Metadata operations
-
-(defun claude-metadata-write (repo-name branch-name data)
-  "Write DATA (plist) as metadata for REPO-NAME/BRANCH-NAME."
-  (let* ((path (claude-metadata-path repo-name branch-name))
-         (dir (file-name-directory path))
-         (json-object-type 'plist)
-         (json-data (json-encode data)))
-    (make-directory dir t)
-    (with-temp-file path
-      (insert json-data))
-    t))
-
-(defun claude-metadata-read (repo-name branch-name)
-  "Read metadata for REPO-NAME/BRANCH-NAME.
-Returns plist or nil if not found."
-  (let ((path (claude-metadata-path repo-name branch-name)))
-    (when (file-exists-p path)
-      (let ((json-object-type 'plist)
-            (json-key-type 'keyword))
-        (json-read-file path)))))
-
-(defun claude-metadata-delete (repo-name branch-name)
-  "Delete metadata file for REPO-NAME/BRANCH-NAME."
-  (let ((path (claude-metadata-path repo-name branch-name)))
-    (when (file-exists-p path)
-      (delete-file path)
-      ;; Clean up empty parent directories
-      (let ((dir (file-name-directory path)))
-        (when (and (file-directory-p dir)
-                   (null (directory-files dir nil "^[^.]")))
-          (delete-directory dir))))))
+;; Note: Metadata operations (claude-metadata-write, claude-metadata-read,
+;; claude-metadata-delete) are now in claude-state.el and exported directly.
 
 ;;; Worktree operations
 
 (defun claude-worktree-create (repo-path branch-name parent-branch)
-  "Create worktree for BRANCH-NAME from REPO-PATH, branching from PARENT-BRANCH.
-Returns (success . path-or-error) cons cell.
-Error can be symbol `branch-exists' or `dir-exists', or string with error message."
-  (let* ((repo-name (claude-repo-name repo-path))
-         (worktree-path (claude-worktree-path repo-name branch-name))
+  "Create worktree for BRANCH-NAME from REPO-PATH.
+Branches from PARENT-BRANCH.  Returns (success . path-or-error) cons.
+Error can be symbol `branch-exists', `dir-exists', or error string.
+Does NOT create metadata - caller should use `claude--create-metadata'."
+  (let* ((repo-name (claude--repo-name repo-path))
+         (worktree-path (claude--worktree-path repo-name branch-name))
          (worktree-dir (file-name-directory worktree-path)))
     ;; Ensure parent directory exists
     (make-directory worktree-dir t)
@@ -78,8 +38,7 @@ Error can be symbol `branch-exists' or `dir-exists', or string with error messag
                         (shell-quote-argument branch-name)
                         (shell-quote-argument worktree-path)
                         (shell-quote-argument parent-branch)))
-           (output (shell-command-to-string cmd))
-           (exit-code (process-exit-status (get-buffer-process (current-buffer)))))
+           (output (shell-command-to-string cmd)))
       (cond
        ;; Check for specific error patterns in output
        ((string-match-p "branch named '.*' already exists" output)
@@ -88,11 +47,6 @@ Error can be symbol `branch-exists' or `dir-exists', or string with error messag
         (cons nil 'dir-exists))
        ;; Success if worktree directory exists
        ((file-directory-p worktree-path)
-        ;; Write metadata
-        (claude-metadata-write repo-name branch-name
-                               (list :parent_branch parent-branch
-                                     :parent_repo (expand-file-name repo-path)
-                                     :created (format-time-string "%Y-%m-%dT%H:%M:%SZ" nil t)))
         (cons t worktree-path))
        ;; Unknown error
        (t
@@ -101,17 +55,13 @@ Error can be symbol `branch-exists' or `dir-exists', or string with error messag
 (defun claude-worktree-create-from-existing (repo-path branch-name)
   "Create worktree for existing BRANCH-NAME from REPO-PATH.
 Use when branch already exists and user wants to reuse it.
-Returns (success . path-or-error) cons cell."
-  (let* ((repo-name (claude-repo-name repo-path))
-         (worktree-path (claude-worktree-path repo-name branch-name))
+Returns (success . path-or-error) cons cell.
+Note: Does NOT create metadata - caller should use claude--create-metadata."
+  (let* ((repo-name (claude--repo-name repo-path))
+         (worktree-path (claude--worktree-path repo-name branch-name))
          (worktree-dir (file-name-directory worktree-path)))
     (make-directory worktree-dir t)
     (let* ((default-directory (expand-file-name repo-path))
-           ;; Get parent branch info before creating worktree
-           (parent-branch (string-trim
-                           (shell-command-to-string
-                            (format "git rev-parse --abbrev-ref %s@{upstream} 2>/dev/null || git rev-parse --abbrev-ref HEAD"
-                                    (shell-quote-argument branch-name)))))
            (cmd (format "git worktree add %s %s 2>&1"
                         (shell-quote-argument worktree-path)
                         (shell-quote-argument branch-name)))
@@ -120,18 +70,15 @@ Returns (success . path-or-error) cons cell."
        ((string-match-p "already exists" output)
         (cons nil 'dir-exists))
        ((file-directory-p worktree-path)
-        (claude-metadata-write repo-name branch-name
-                               (list :parent_branch parent-branch
-                                     :parent_repo (expand-file-name repo-path)
-                                     :created (format-time-string "%Y-%m-%dT%H:%M:%SZ" nil t)))
         (cons t worktree-path))
        (t
         (cons nil output))))))
 
 (defun claude-worktree-remove (repo-name branch-name)
   "Remove worktree for BRANCH-NAME in REPO-NAME.
-Returns (success . nil-or-error) cons cell."
-  (let* ((worktree-path (claude-worktree-path repo-name branch-name))
+Returns (success . nil-or-error) cons cell.
+Note: Does NOT delete metadata - caller should use claude-metadata-delete."
+  (let* ((worktree-path (claude--worktree-path repo-name branch-name))
          (metadata (claude-metadata-read repo-name branch-name))
          (parent-repo (plist-get metadata :parent_repo)))
     (if (not parent-repo)
@@ -142,25 +89,38 @@ Returns (success . nil-or-error) cons cell."
              (output (shell-command-to-string cmd)))
         (if (or (string-match-p "^$" output)
                 (not (file-directory-p worktree-path)))
-            (progn
-              (claude-metadata-delete repo-name branch-name)
-              (cons t nil))
+            (cons t nil)
           (cons nil output))))))
+
+(defun claude-worktree-remove-force (repo-name branch-name)
+  "Force remove worktree for REPO-NAME/BRANCH-NAME.
+Removes even if there are uncommitted changes.
+Returns (success . nil-or-error) cons cell."
+  (let* ((worktree-path (claude--worktree-path repo-name branch-name))
+         (metadata (claude-metadata-read repo-name branch-name))
+         (parent-repo (plist-get metadata :parent_repo)))
+    (cond
+     ((not parent-repo)
+      ;; No parent repo - try to remove directory directly
+      (when (file-directory-p worktree-path)
+        (delete-directory worktree-path t))
+      (cons t nil))
+     (t
+      (let* ((default-directory parent-repo)
+             (cmd (format "git worktree remove --force %s 2>&1"
+                          (shell-quote-argument worktree-path)))
+             (output (shell-command-to-string cmd)))
+        ;; Even if git fails, try direct removal
+        (when (file-directory-p worktree-path)
+          (ignore-errors (delete-directory worktree-path t)))
+        (if (not (file-directory-p worktree-path))
+            (cons t nil)
+          (cons nil output)))))))
 
 (defun claude-worktree-list ()
   "List all worktrees across all repos.
 Returns list of (repo-name . branch-name) pairs."
-  (let ((metadata-dir (expand-file-name claude-metadata-dir))
-        (result nil))
-    (when (file-directory-p metadata-dir)
-      (dolist (repo-dir (directory-files metadata-dir t "^[^.]"))
-        (when (file-directory-p repo-dir)
-          (let ((repo-name (file-name-nondirectory repo-dir)))
-            (dolist (json-file (directory-files repo-dir t "\\.json$"))
-              (let ((branch-name (file-name-sans-extension
-                                  (file-name-nondirectory json-file))))
-                (push (cons repo-name branch-name) result)))))))
-    (nreverse result)))
+  (claude--list-all-workspaces))
 
 ;;; Git operations
 
@@ -189,6 +149,29 @@ Returns -1 if unable to determine (missing parent-branch, not a git repo, etc.).
             (string-to-number result)
           -1)))))
 
+(defun claude-git-commits-behind (worktree-path parent-branch)
+  "Count commits behind PARENT-BRANCH in WORKTREE-PATH.
+Returns -1 if unable to determine."
+  (cond
+   ((not (file-directory-p worktree-path)) -1)
+   ((or (null parent-branch) (string-empty-p parent-branch)) -1)
+   (t (let* ((default-directory worktree-path)
+             (result (string-trim
+                      (shell-command-to-string
+                       (format "git rev-list --count HEAD..%s 2>&1"
+                               (shell-quote-argument parent-branch))))))
+        (if (string-match-p "^[0-9]+$" result)
+            (string-to-number result)
+          -1)))))
+
+(defun claude-git-has-uncommitted-changes (worktree-path)
+  "Return t if WORKTREE-PATH has uncommitted changes."
+  (when (file-directory-p worktree-path)
+    (let* ((default-directory worktree-path)
+           (status (string-trim (shell-command-to-string
+                                 "git status --porcelain 2>/dev/null"))))
+      (not (string-empty-p status)))))
+
 (defun claude-git-merge-branch (repo-path target-branch source-branch)
   "Merge SOURCE-BRANCH into TARGET-BRANCH in REPO-PATH.
 Returns (success . nil-or-error) cons cell."
@@ -201,13 +184,13 @@ Returns (success . nil-or-error) cons cell."
           (cons nil (format "Checkout failed: %s" checkout-result))
         ;; Then merge
         (let ((merge-result (shell-command-to-string
-                             (format "git merge %s 2>&1"
+                             (format "git merge --no-ff %s 2>&1"
                                      (shell-quote-argument source-branch)))))
           (cond
            ((string-match-p "CONFLICT" merge-result)
             ;; Abort the merge
             (shell-command-to-string "git merge --abort")
-            (cons nil "Merge conflicts detected"))
+            (cons nil 'conflict))
            ((string-match-p "error\\|fatal" merge-result)
             (cons nil merge-result))
            (t
@@ -229,6 +212,38 @@ Returns (success . nil-or-error) cons cell."
               (cons nil force-result)
             (cons t nil)))
       (cons t nil))))
+
+(defun claude-git-fetch (repo-path &optional remote)
+  "Fetch from REMOTE (default origin) in REPO-PATH.
+Returns (success . nil-or-error) cons cell."
+  (let* ((default-directory (expand-file-name repo-path))
+         (remote-name (or remote "origin"))
+         (result (shell-command-to-string
+                  (format "git fetch %s 2>&1"
+                          (shell-quote-argument remote-name)))))
+    (if (string-match-p "fatal:" result)
+        (cons nil result)
+      (cons t nil))))
+
+(defun claude-git-repo-p (path)
+  "Return t if PATH is inside a git repository."
+  (when (file-directory-p path)
+    (let ((default-directory path))
+      (= 0 (shell-command "git rev-parse --git-dir >/dev/null 2>&1")))))
+
+(defun claude--detect-parent-branch (repo-path branch-name)
+  "Detect likely parent branch for existing BRANCH-NAME in REPO-PATH."
+  (let ((default-directory repo-path))
+    ;; Try upstream first
+    (let ((upstream (string-trim
+                     (shell-command-to-string
+                      (format "git rev-parse --abbrev-ref %s@{upstream} 2>/dev/null"
+                              (shell-quote-argument branch-name))))))
+      (if (not (string-empty-p upstream))
+          upstream
+        ;; Fall back to merge-base with main/master
+        (let ((main-exists (= 0 (shell-command "git rev-parse --verify main 2>/dev/null"))))
+          (if main-exists "main" "master"))))))
 
 (provide 'claude-worktree)
 ;;; claude-worktree.el ends here

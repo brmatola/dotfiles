@@ -2,11 +2,13 @@
 
 ;;; Commentary:
 ;; Monitors Claude buffers for attention needs and updates modeline.
+;; Subscribes to state-change-hook to skip non-active workspaces.
 
 ;;; Code:
 
+(require 'claude-state)
+
 ;; Forward declarations
-(declare-function claude-workspace-list "claude-workspace")
 (declare-function +workspace/switch-to "~/.config/emacs/modules/ui/workspaces/autoload/workspaces")
 
 (defcustom claude-monitor-interval 2
@@ -42,6 +44,9 @@
 (defvar claude-monitor-timer nil
   "Timer for attention monitoring.")
 
+(defvar claude-monitor--attention-state (make-hash-table :test 'equal)
+  "Hash table mapping workspace-name -> attention boolean.")
+
 ;; Buffer-local state
 (defvar-local claude--last-output-time nil
   "Timestamp of last detected output change.")
@@ -60,6 +65,8 @@
 (defface claude-idle-face
   '((t :foreground "#5B6268"))
   "Face for Claude idle indicator.")
+
+;;; Content Analysis
 
 (defun claude--get-last-n-lines (buffer n)
   "Get last N lines from vterm BUFFER, filtering fake newlines."
@@ -86,6 +93,8 @@
                 (string-match-p pattern text))
               claude-attention-patterns)))
 
+;;; Buffer Attention Checking
+
 (defun claude--check-buffer-attention (buffer)
   "Check if BUFFER needs attention and update its state."
   (when (buffer-live-p buffer)
@@ -101,17 +110,42 @@
          ;; Content stable long enough - check patterns
          ((and claude--last-output-time
                (> (- now claude--last-output-time) claude-attention-idle-threshold))
-          (let ((content (claude--get-last-n-lines buffer 15)))
+          (let ((content (claude--get-last-n-lines buffer 15))
+                (old-attention claude--needs-attention))
             (setq claude--needs-attention
-                  (claude--matches-attention-pattern-p content)))))))))
+                  (claude--matches-attention-pattern-p content))
+            ;; Fire hook if attention state changed
+            (when (not (eq old-attention claude--needs-attention))
+              (when-let ((ws-name (claude--workspace-for-buffer buffer)))
+                (run-hook-with-args 'claude-attention-change-hook
+                                    ws-name claude--needs-attention))))))))))
+
+(defun claude--workspace-for-buffer (buffer)
+  "Get workspace name for BUFFER based on buffer name pattern."
+  (let ((name (buffer-name buffer)))
+    (when (string-match "^\\*claude:\\([^:]+\\):\\([^*]+\\)\\*$" name)
+      (format "%s:%s" (match-string 1 name) (match-string 2 name)))))
+
+(defun claude--should-check-workspace-p (repo-name branch-name)
+  "Return t if workspace REPO-NAME/BRANCH-NAME should be checked for attention.
+Only active workspaces should be checked."
+  (let ((metadata (claude-metadata-read repo-name branch-name)))
+    (equal (plist-get metadata :status) "active")))
 
 (defun claude--check-all-buffers ()
-  "Check all Claude buffers for attention needs."
+  "Check all Claude buffers for attention needs.
+Skips non-active workspaces."
   (dolist (buffer (buffer-list))
-    (when (string-match-p "^\\*claude:" (buffer-name buffer))
-      (claude--check-buffer-attention buffer)))
+    (let ((name (buffer-name buffer)))
+      (when (string-match "^\\*claude:\\([^:]+\\):\\([^*]+\\)\\*$" name)
+        (let ((repo-name (match-string 1 name))
+              (branch-name (match-string 2 name)))
+          (when (claude--should-check-workspace-p repo-name branch-name)
+            (claude--check-buffer-attention buffer))))))
   ;; Force modeline update
   (force-mode-line-update t))
+
+;;; Public Query Functions
 
 (defun claude--any-needs-attention-p ()
   "Return t if any Claude buffer needs attention."
@@ -126,6 +160,8 @@
               (and (string-match-p "^\\*claude:" (buffer-name buffer))
                    (buffer-local-value 'claude--needs-attention buffer)))
             (buffer-list)))
+
+;;; Monitor Control
 
 ;;;###autoload
 (defun claude-monitor-start ()
@@ -168,11 +204,31 @@
         (switch-to-buffer buffer))
     (message "No Claude buffers need attention")))
 
-;; Modeline segment (via doom-modeline)
-(after! doom-modeline
+;;; State Change Handler
+
+(defun claude-monitor--on-state-change (workspace-name _old-status new-status)
+  "Handle workspace state changes.
+Clear attention state when workspace becomes non-active."
+  (unless (eq new-status 'active)
+    ;; Clear attention state for this workspace
+    (remhash workspace-name claude-monitor--attention-state)
+    ;; Clear buffer-local state if buffer exists
+    (let ((parsed (claude--parse-workspace-name workspace-name)))
+      (when parsed
+        (let ((buffer-name (claude--buffer-name (car parsed) (cdr parsed))))
+          (when-let ((buffer (get-buffer buffer-name)))
+            (with-current-buffer buffer
+              (setq claude--needs-attention nil))))))))
+
+;; Subscribe to state changes
+(add-hook 'claude-state-change-hook #'claude-monitor--on-state-change)
+
+;;; Modeline Segment
+
+(with-eval-after-load 'doom-modeline
   (doom-modeline-def-segment claude-status
     "Display Claude session status."
-    (let* ((workspaces (claude-workspace-list))
+    (let* ((workspaces (claude--list-active-workspaces))
            (needs-attention (claude--any-needs-attention-p))
            (map (make-sparse-keymap)))
       (when workspaces
@@ -187,6 +243,17 @@
           'help-echo (format "%d Claude session(s)%s - click to jump"
                             (length workspaces)
                             (if needs-attention " (attention needed)" ""))))))))
+
+;;; Auto-start on Doom Init
+
+(defun claude-monitor--maybe-start ()
+  "Start monitor if there are existing Claude workspaces."
+  (when (claude--list-active-workspaces)
+    (claude-monitor-start)))
+
+;; Hook to be called from claude.el after Doom is ready
+(defvar claude-monitor--init-hook-added nil
+  "Non-nil if init hook has been added.")
 
 (provide 'claude-monitor)
 ;;; claude-monitor.el ends here

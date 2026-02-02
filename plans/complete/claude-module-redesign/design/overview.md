@@ -1,6 +1,6 @@
 # Claude Module Redesign: Overview
 
-Last updated: 2026-02-01
+Last updated: 2026-02-01 (reviewed)
 
 ## Problem Statement
 
@@ -53,6 +53,23 @@ Root cause: The three systems (git worktrees, Doom workspaces, vterm sessions) h
 4. **Full workspace isolation** — Buffers are scoped to their workspace, no bleeding
 5. **Safe merge flow** — Pre-flight conflict check, conflicts resolved in worktree
 6. **Event-driven UI** — Dashboard/modeline refresh on state changes, not polling
+7. **Separate hooks for lifecycle and attention** — `claude-state-change-hook` for status, `claude-attention-change-hook` for monitor
+
+### Keybindings
+
+All under `SPC C` prefix:
+
+| Key | Command | Description |
+|-----|---------|-------------|
+| `c` | Create workspace | New worktree + workspace + Claude session |
+| `d` | Dashboard | See all sessions, status, navigate |
+| `h` | Home workspace | Jump to/create home workspace for current repo |
+| `j` | Jump to Claude | Focus Claude buffer in current workspace |
+| `t` | New terminal | Spawn extra terminal in current workspace |
+| `x` | Close workspace | Merge-aware cleanup with confirmation |
+| `r` | Repair workspace | Attempt to repair a broken workspace |
+| `m` | Toggle monitor | Start/stop attention detection |
+| `g` | Magit status | Open magit in current workspace |
 
 ## File Structure
 
@@ -75,6 +92,24 @@ claude/
 
 ## Related Documents
 
-- [State Model](./state-model.md) — State machine details
-- [Reconciliation](./reconciliation.md) — How reconciliation works
-- [Testing Strategy](./testing.md) — Test pyramid and approach
+### Core Design
+- [State Model](./state-model.md) — State machine, metadata schema, transitions
+- [Reconciliation](./reconciliation.md) — How reconciliation keeps components in sync
+- [Migration](./migration.md) — Upgrading from v0 to v1 metadata schema
+
+### Flows
+- [Creation Flow](./creation-flow.md) — Workspace creation with rollback
+- [Cleanup Flow](./cleanup-flow.md) — Merge, PR, and cleanup workflows
+
+### Components
+- [Monitor](./monitor.md) — Attention detection implementation
+- [Terminals](./terminals.md) — Extra terminal management
+- [Buffer Scoping](./buffer-scoping.md) — How workspace isolation works
+- [UI Components](./ui-components.md) — Dashboard, modeline, status buffers
+
+### Quality
+- [Testing Strategy](./testing.md) — Test pyramid, cases, and debugging
+
+## Implementation
+
+- [Tasks](../implementation/tasks.md) — Phased implementation plan with dependencies

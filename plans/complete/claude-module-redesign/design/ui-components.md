@@ -1,6 +1,6 @@
 # Claude Module: UI Components
 
-Last updated: 2026-02-01
+Last updated: 2026-02-01 (reviewed)
 
 ## Dashboard
 
@@ -47,7 +47,8 @@ Central view of all Claude workspaces with their status. Reactive - updates auto
 | `k` / `p` | Move up |
 | `RET` | Switch to workspace |
 | `c` | Create new workspace |
-| `x` | Close workspace |
+| `x` | Close workspace (blocked on `creating`; force cleanup for broken/stuck/failed) |
+| `r` | Repair workspace (only for broken state) |
 | `g` | Refresh (manual) |
 | `/` | Filter by repo |
 | `q` | Quit dashboard |
@@ -61,9 +62,11 @@ Dashboard refreshes automatically when:
 
 ```elisp
 (defun claude-dashboard--setup-auto-refresh ()
-  "Set up automatic refresh on state changes."
+  "Set up automatic refresh on state and attention changes."
   (add-hook 'claude-state-change-hook
-            #'claude-dashboard--refresh-if-visible nil t))
+            #'claude-dashboard--refresh-if-visible nil t)
+  (add-hook 'claude-attention-change-hook
+            (lambda (_ws _attn) (claude-dashboard--refresh-if-visible)) nil t))
 
 (defun claude-dashboard--refresh-if-visible ()
   "Refresh dashboard if it's currently visible."
@@ -145,8 +148,9 @@ Global indicator showing if any Claude workspace needs attention.
            (t 'ok)))
     (force-mode-line-update t)))
 
-;; Subscribe to state changes
+;; Subscribe to both lifecycle and attention changes
 (add-hook 'claude-state-change-hook #'claude-modeline--update)
+(add-hook 'claude-attention-change-hook (lambda (_ws _attn) (claude-modeline--update)))
 ```
 
 ### Click Behavior
@@ -206,32 +210,6 @@ Shows workspace state during cleanup, presents options.
 | `c` / `q` | Cancel |
 | `v` | View full diff in magit |
 | `g` | Open magit status |
-
-## Attention Patterns
-
-Patterns that trigger "needs attention" state:
-
-```elisp
-(defcustom claude-attention-patterns
-  '(;; Permission prompts
-    "Allow .* to \\(run\\|read\\|write\\|edit\\)"
-    "needs your permission"
-
-    ;; Yes/no prompts
-    "\\[y/n\\]"
-    "\\[Y/n\\]"
-    "\\[yes/no\\]"
-
-    ;; Waiting for input (prompt at end of buffer)
-    "^> *$"
-    "^❯ *$"
-
-    ;; Claude-specific
-    "Would you like"
-    "Do you want"
-    "Should I")
-  "Patterns indicating Claude needs user attention.")
-```
 
 ## Faces (Colors/Styles)
 

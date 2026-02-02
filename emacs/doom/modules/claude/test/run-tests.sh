@@ -1,44 +1,57 @@
 #!/bin/bash
-# Run Claude module tests in batch mode
+# Run all Claude module tests
+# Usage: ./test/run-tests.sh [--verbose]
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_DIR="$(dirname "$SCRIPT_DIR")"
-DOOM_DIR="$HOME/.config/emacs"
-DOOM_LOCAL="$DOOM_DIR/.local"
 
-echo "Running Claude module tests..."
+cd "$MODULE_DIR"
+
+echo "=== Claude Module Tests ==="
 echo ""
 
-# Find emacs binary - prefer Doom's if available
-if [ -x "$DOOM_LOCAL/emacs/bin/emacs" ]; then
-    EMACS="$DOOM_LOCAL/emacs/bin/emacs"
-elif command -v emacs &> /dev/null; then
-    EMACS="emacs"
+# Track results
+TOTAL=0
+PASSED=0
+
+run_test_file() {
+    local name="$1"
+    local deps="$2"
+    local test_file="$3"
+
+    echo "Running: $name"
+    TOTAL=$((TOTAL + 1))
+
+    if emacs --batch \
+        -l ert \
+        $deps \
+        -l "$test_file" \
+        -f ert-run-tests-batch-and-exit 2>&1; then
+        PASSED=$((PASSED + 1))
+    else
+        echo "  FAILED"
+    fi
+    echo ""
+}
+
+# Unit tests - claude-state
+run_test_file "claude-state-test" "-l claude-state.el" "test/claude-state-test.el"
+
+# Unit tests - claude-reconcile (needs vterm stubs)
+run_test_file "claude-reconcile-test" "-l claude-state.el -l claude-vterm.el -l claude-reconcile.el" "test/claude-reconcile-test.el"
+
+# Integration tests
+run_test_file "claude-test" "-l claude-state.el -l claude-worktree.el" "test/claude-test.el"
+
+echo "=== Results ==="
+echo "$PASSED/$TOTAL test suites passed"
+
+if [[ $PASSED -eq $TOTAL ]]; then
+    echo "All tests passed!"
+    exit 0
 else
-    echo "Error: Emacs not found"
+    echo "Some tests failed"
     exit 1
 fi
-
-# Run with minimal init - just load what we need
-$EMACS --batch \
-    --eval "(setq claude-worktree-dir \"/tmp/test-worktrees\")" \
-    --eval "(setq claude-metadata-dir \"/tmp/test-metadata\")" \
-    -L "$MODULE_DIR" \
-    -L "$DOOM_LOCAL/straight/build/vterm" \
-    -L "$DOOM_LOCAL/straight/build/json" \
-    --eval "(require 'json)" \
-    --eval "(provide 'vterm)" \
-    --eval "(defun vterm-mode () nil)" \
-    --eval "(defun vterm-send-string (s) nil)" \
-    --eval "(defun vterm-reset-cursor-point () nil)" \
-    --eval "(provide 'projectile)" \
-    --eval "(defun projectile-project-root () nil)" \
-    -l ert \
-    -l claude-worktree \
-    -l "$SCRIPT_DIR/claude-test.el" \
-    -f ert-run-tests-batch-and-exit 2>&1
-
-echo ""
-echo "Tests complete!"

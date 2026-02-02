@@ -153,6 +153,77 @@ When status = "stuck":
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## PR Flow
+
+When user selects `[p] Create PR`:
+
+```
+User: [p] Create PR
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│  1. Check remote tracking branch        │
+│     - If not pushed: push with -u       │
+│     - If behind: warn and offer to push │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│  2. Run: gh pr create                   │
+│     --title "{branch} → {parent}"       │
+│     --body "Created from Claude"        │
+│     --web                               │
+│                                         │
+│  Opens browser to complete PR           │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│  3. Workspace stays open (status=active)│
+│     User can continue working or close  │
+│     later with [m] merge or [d] delete  │
+└─────────────────────────────────────────┘
+```
+
+### Implementation
+
+```elisp
+(defun claude--create-pr (repo-name branch-name)
+  "Create PR for workspace."
+  (let* ((metadata (claude-metadata-read repo-name branch-name))
+         (worktree-path (plist-get metadata :worktree_path))
+         (parent-branch (plist-get metadata :parent_branch))
+         (default-directory worktree-path))
+
+    ;; Ensure branch is pushed
+    (let ((remote-tracking (string-trim
+                            (shell-command-to-string
+                             "git rev-parse --abbrev-ref @{upstream} 2>/dev/null"))))
+      (when (string-empty-p remote-tracking)
+        ;; Not tracking remote - push with -u
+        (message "Pushing branch to origin...")
+        (shell-command (format "git push -u origin %s"
+                               (shell-quote-argument branch-name)))))
+
+    ;; Create PR via gh
+    (let ((cmd (format "gh pr create --base %s --head %s --title %s --web"
+                       (shell-quote-argument parent-branch)
+                       (shell-quote-argument branch-name)
+                       (shell-quote-argument
+                        (format "%s → %s" branch-name parent-branch)))))
+      (shell-command cmd))))
+```
+
+### After PR Creation
+
+The workspace remains `active`. User workflow options:
+
+1. **Continue working** — Make more commits, push, PR updates automatically
+2. **Close with delete** — `[d]` deletes local branch without merge (PR is on remote)
+3. **Close with merge** — `[m]` if PR was merged remotely and local needs cleanup
+
+**Note:** We don't track "has PR" state in metadata. Users manage this flow manually since PRs live on the remote and may be merged by others.
+
 ## Home Workspace Cleanup
 
 Home workspaces have a simpler flow (no merge):
