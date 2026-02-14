@@ -1,6 +1,6 @@
 # Dotfiles
 
-Last verified: 2026-02-01
+Last verified: 2026-02-14
 
 ## Purpose
 
@@ -69,7 +69,7 @@ Development standards for the Claude module and other Emacs Lisp code.
 
 # Run individual test file
 cd emacs/doom/modules/claude
-emacs --batch -l ert -l claude-state.el -l test/claude-state-test.el -f ert-run-tests-batch-and-exit
+emacs --batch -l ert -l claude-grove.el -l claude-monitor.el -l test/claude-grove-test.el -f ert-run-tests-batch-and-exit
 ```
 
 ### Linting
@@ -81,34 +81,31 @@ emacs --batch -l ert -l claude-state.el -l test/claude-state-test.el -f ert-run-
 
 ### Module Structure
 
-The Claude module has a strict dependency order:
+The Claude module delegates workspace lifecycle to grove CLI:
 
 ```
-claude-state.el      # No deps - state machine, metadata, naming
+claude-grove.el      # No deps — async grove CLI wrapper
     ↓
-claude-vterm.el      # Depends: claude-state
-claude-worktree.el   # Depends: claude-state
+claude-monitor.el    # No deps — attention detection (vterm buffer output)
     ↓
-claude-reconcile.el  # Depends: claude-state, claude-vterm
+claude-dashboard.el  # Depends: claude-grove, claude-monitor
+                     # Mission control: rendering, Doom workspaces, vterm, actions
     ↓
-claude-workspace.el  # Depends: claude-state, claude-vterm, claude-worktree
-claude-monitor.el    # Depends: claude-state
-claude-dashboard.el  # Depends: claude-state
-claude-cleanup.el    # Depends: claude-state, claude-vterm
-    ↓
-claude.el            # Entry point - requires all above
+claude.el            # Entry point — requires all above, global keybinding (SPC ;)
 ```
 
 ### Batch vs Doom
 
 | Can run in batch mode | Requires Doom/vterm |
 |-----------------------|---------------------|
-| `claude-state.el` | `claude-workspace.el` |
-| `claude-worktree.el` | `claude-monitor.el` (modeline) |
-| `claude-vterm.el` (with stubs) | `claude-dashboard.el` |
-| `claude-reconcile.el` (with stubs) | `claude-cleanup.el` |
+| `claude-grove.el` | `claude-dashboard.el` (actions) |
+| `claude-monitor.el` | `claude.el` (keybindings) |
 
 Tests use stubs for Doom workspace functions (`+workspace-exists-p`, etc.) and vterm functions to run in batch mode.
+
+### External Dependencies
+
+- **grove CLI** — workspace and repo management (`npm install -g @twiglylabs/grove`)
 
 ### Coding Standards
 
@@ -125,19 +122,15 @@ Tests use stubs for Doom workspace functions (`+workspace-exists-p`, etc.) and v
 (require 'ert)
 (add-to-list 'load-path (expand-file-name ".." (file-name-directory load-file-name)))
 
-;; Set up test environment
-(defvar claude-worktree-dir "/tmp/test-worktrees")
-(defvar claude-metadata-dir "/tmp/test-metadata")
+;; Stub Doom workspace functions
+(unless (fboundp '+workspace-exists-p)
+  (defun +workspace-exists-p (_name) nil))
 
-(require 'claude-state)
+(require 'claude-grove)
+(require 'claude-monitor)
 
 (ert-deftest my-test-case ()
   "Description of what this tests."
-  (let ((claude-metadata-dir (make-temp-file "test" t)))
-    (unwind-protect
-        (progn
-          ;; Test code here
-          (should (equal expected actual)))
-      ;; Cleanup
-      (delete-directory claude-metadata-dir t))))
+  ;; Test code here
+  (should (equal expected actual)))
 ```

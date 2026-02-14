@@ -24,55 +24,24 @@ Use these via the Task tool for delegation:
 
 ---
 
-## Worktree Development
+## Workspace Context
 
-Sessions run in either the **main repository** or an **isolated worktree**.
+You run inside workspaces managed by the user. Don't create, merge, or close
+workspaces — focus on the work.
 
-### Detecting Your Environment
+### Plan Tracking (trellis)
 
-Check for Emacs-managed worktree metadata:
+If the repo has a `.trellis` config, use trellis to check and update plan status:
 
-```bash
-REPO=$(basename "$(git rev-parse --show-toplevel)")
-BRANCH=$(git branch --show-current)
-METADATA="$HOME/worktrees/metadata/$REPO/$BRANCH.json"
+- `trellis status` — see all plans and their state
+- `trellis ready` — what's ready to work on
+- `trellis update <id> <status>` — mark progress (in_progress, done)
+- `trellis show <id>` — see a plan's details and dependencies
 
-if [[ -f "$METADATA" ]]; then
-  echo "In Emacs-managed worktree"
-else
-  echo "In main repository or standalone worktree"
-fi
-```
+Plans live in `plans/active/` at the workspace root.
 
-### Main Repository (Home)
+### Branch Safety
 
-- Used for planning, coordination, running dev servers
-- Safe to push to remote, create PRs
-- No automatic cleanup—changes persist
-
-### Emacs-Managed Worktree
-
-- Isolated branch for focused work
-- Located at `~/worktrees/{repo}/{branch}/`
-- Metadata at `~/worktrees/metadata/{repo}/{branch}.json`
-- **Do not merge or push directly**—report readiness and let the user handle integration via Emacs
-- Worktree will be cleaned up when user closes the workspace
-
-### Metadata Schema
-
-```json
-{
-  "version": 1,
-  "status": "active",
-  "parent_branch": "main",
-  "worktree_path": "~/worktrees/repo/feature",
-  "created_at": "2026-02-01T10:00:00Z",
-  "workflow": {
-    "plan": "plan-name",
-    "phase": "implement",
-    "started": "2026-02-01T10:00:00Z"
-  }
-}
-```
-
-The `workflow` key is optional—present when running a structured workflow.
+- Don't push, merge, or delete branches — the user handles this
+- Commit freely on the current branch
+- If you need to sync with upstream, ask first

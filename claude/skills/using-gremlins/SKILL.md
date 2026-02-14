@@ -63,7 +63,6 @@ digraph skill_flow {
 | `gremlins:verification-before-completion` | Before claiming work is done |
 | `gremlins:requesting-code-review` | Before creating PRs |
 | `gremlins:receiving-code-review` | After getting review feedback |
-| `gremlins:using-git-worktrees` | Isolating feature work |
 | `gremlins:subagent-driven-development` | Executing plans with subagents |
 | `gremlins:dispatching-parallel-agents` | Independent parallel tasks |
 | `gremlins:finishing-a-development-branch` | Completing branch work (PR/merge) |

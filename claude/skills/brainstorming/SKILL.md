@@ -42,8 +42,7 @@ Start by understanding the current project context, then ask questions one at a 
 
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"
-- Use gremlins:using-git-worktrees to create isolated workspace
-- Use gremlins:writing-plans to create detailed implementation plan
+- The user will create a workspace via their editor — continue with gremlins:writing-plans to create the implementation plan
 
 ## Key Principles
 

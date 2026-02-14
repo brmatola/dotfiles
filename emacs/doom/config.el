@@ -42,6 +42,30 @@
 ;; change `org-directory'. It must be set before org loads!
 (setq org-directory "~/org/")
 
+;;; Treemacs Configuration
+;; Fix file event processing errors when projects become nil
+(after! treemacs
+  ;; Scope treemacs per Doom workspace (persp-mode) so each workspace
+  ;; gets its own project tree instead of one global view
+  (treemacs-set-scope-type 'Perspectives)
+
+  ;; Use deferred git mode - less aggressive, fewer race conditions
+  (setq treemacs-git-mode 'deferred)
+
+  ;; Increase delay to reduce event processing conflicts
+  (setq treemacs-file-event-delay 2000)
+
+  ;; Ensure filewatch mode is enabled for auto-refresh
+  (treemacs-filewatch-mode t)
+
+  ;; Wrap the file event processor to handle nil projects gracefully
+  (advice-add 'treemacs--process-file-events :around
+              (lambda (orig-fn &rest args)
+                (condition-case err
+                    (apply orig-fn args)
+                  (wrong-type-argument
+                   (message "Treemacs: Ignored stale file event"))))))
+
 
 ;; Whenever you reconfigure a package, make sure to wrap your config in an
 ;; `after!' block, otherwise Doom's defaults may override your settings. E.g.
@@ -77,18 +101,11 @@
 
 ;;; Claude Multi-Workspace Module
 ;; Manages multiple Claude Code sessions in parallel across different repos
-;; and worktrees.
+;; and worktrees. Dashboard is the sole status UI — no modeline segment.
 
 ;; Add custom modules to load path (Doom-idiomatic)
 (add-load-path! "modules/claude")
 
-;; Load Claude workflow module AFTER doom-modeline is available
-;; This ensures modeline segment can be defined properly
+;; Load after doom-modeline so Doom workspace functions are available
 (after! doom-modeline
-  (load! "modules/claude/claude")
-
-  ;; Set up custom modeline with Claude status
-  (doom-modeline-def-modeline 'claude-main
-    '(eldoc bar workspace-name window-number modals matches buffer-info remote-host buffer-position parrot selection-info)
-    '(misc-info minor-modes input-method buffer-encoding major-mode process vcs check claude-status))
-  (doom-modeline-set-modeline 'claude-main 'default))
+  (load! "modules/claude/claude"))

@@ -47,7 +47,9 @@
       "Bash(pytest*)",
       "Bash(python -c *)",
       "Bash(brew list*)",
-      "Bash(brew info*)"
+      "Bash(brew info*)",
+      "Bash(grove *)",
+      "Bash(trellis *)"
     ]
   },
   "preferences": {

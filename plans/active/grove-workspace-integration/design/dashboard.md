@@ -33,17 +33,22 @@ The dashboard is a full-window buffer in the main workspace. It's the primary UI
                                           + New Worktree
 
   ─────────────────────────────────────────────────────────
-   c new   s sync   x close   RET jump   ? help
+   c new   s sync   x close   r remove   RET jump   TAB fold   ? help
 ```
 
 ### Visual Elements
 
 **Repo headers** — Large text, subtle background band (like magit section headers). Nerd-font icon  for git. Repo name in bold. `[Open]` button on the right — box face with background.
 
-**Worktree entries** — Tree lines using `├ └ │` in a dim face. Branch icon  before branch name. Commit count right-aligned. Status indicator with colored dot:
+**Worktree entries** — Tree lines using `├ └ │` in a dim face. Branch icon  before branch name. Commit count right-aligned (for grouped workspaces, this is the **sum** across all repos). Status indicator with colored dot:
 - `⚡ working` — green face, dim (all good, no action needed)
 - ` waiting` — amber/yellow face, bold (needs attention — Claude stopped)
 - ` error` — red face, bold (something broke)
+- ` creating…` — blue face, dim (grove workspace create in progress)
+- ` closing…` — blue face, dim (grove workspace close in progress)
+- `✖ failed` — red face, bold (grove operation failed — retry or discard)
+
+The attention states (working/waiting/error) apply when grove status is `active`. The lifecycle states (creating/closing/failed) come directly from grove and take precedence — no vterm monitoring needed for workspaces that aren't active yet.
 
 **Grouped workspace sub-repos** — Extra indentation under the worktree entry. Dimmer than the worktree line. Shows per-repo status:
 - `✓ clean` — very dim green (fine, no action)
@@ -70,6 +75,11 @@ claude-dashboard-commits-face       ; dim, right-aligned
 claude-dashboard-working-face       ; green foreground
 claude-dashboard-waiting-face       ; amber foreground, bold
 claude-dashboard-error-face         ; red foreground, bold
+claude-dashboard-lifecycle-face     ; blue foreground, dim (creating/closing)
+claude-dashboard-failed-face        ; red foreground, bold (failed state)
+
+;; Navigation
+claude-dashboard-current-face       ; subtle background highlight for current entry
 
 ;; Sub-repo details
 claude-dashboard-subrepo-face       ; dim
@@ -112,6 +122,7 @@ All faces inherit from appropriate doom-themes base faces for theme compatibilit
 | `s` | worktree entry | Sync workspace (`grove workspace sync`) |
 | `x` | worktree entry | Close workspace (prompts merge/discard) |
 | `a` | anywhere | Add repo (`grove repo add`, prompts for path) |
+| `r` | repo header | Remove repo (`grove repo remove`, confirms first) |
 | `n` / `p` | anywhere | Next/previous entry (skip decorative lines) |
 | `TAB` | repo header | Collapse/expand repo section |
 | `q` | anywhere | Bury dashboard buffer |
@@ -126,13 +137,13 @@ All faces inherit from appropriate doom-themes base faces for theme compatibilit
 ### Navigation Flow
 
 ```
-SPC C m  →  Main workspace (dashboard auto-focused)
+SPC ;  →  Main workspace (dashboard auto-focused)
              │
              ├── RET on repo → Doom workspace for that repo (home)
-             │                  └── SPC C m → back to main
+             │                  └── SPC ; → back to main
              │
              ├── RET on worktree → Doom workspace for that worktree
-             │                      └── SPC C m → back to main
+             │                      └── SPC ; → back to main
              │
              ├── c on repo → minibuffer prompt for branch name
              │                → grove workspace create (async)
@@ -151,7 +162,9 @@ SPC C m  →  Main workspace (dashboard auto-focused)
 **Timer-based polling** while dashboard buffer is visible:
 - Poll interval: 5 seconds (configurable via `claude-dashboard-refresh-interval`)
 - Only runs when dashboard buffer is in a visible window
-- Calls `grove repo list --json` and `claude-workspace-attention` per workspace
+- Calls `grove repo list --json` async (tier 1) — skips if a previous call is still in-flight (debounce)
+- Fires `grove workspace status` per active workspace (tier 2) — progressive enrichment
+- Calls `claude-workspace-attention` per workspace (local, always fast)
 - Preserves cursor position across refreshes (by remembering which entry point is on)
 - Timer stops when dashboard buffer is killed or buried
 
@@ -165,23 +178,93 @@ The dashboard is a read-only special-mode buffer (`claude-dashboard-mode`), not 
 
 ### Rendering Pipeline
 
+Rendering is split into three parts: tier 1 fetch (async, instant), buffer painting (sync, fast), and tier 2 enrichment (async, progressive).
+
+**Data cache** — A buffer-local variable holds the merged grove data. Both tiers write to the cache; the paint function reads from it. This decouples fetching from rendering.
+
 ```elisp
-(defun claude-dashboard-render ()
-  "Render the dashboard buffer from grove data."
-  ;; 1. Call grove
-  (let* ((grove-data (claude-grove-repo-list))
-         (attention  (claude-dashboard--collect-attention))
+(defvar-local claude-dashboard--grove-cache nil
+  "Cached grove data. Updated by tier 1 and tier 2 callbacks.
+Structure mirrors `grove repo list --json` output, progressively
+enriched with per-workspace git stats from tier 2.")
+```
+
+**Refresh flow:**
+
+```elisp
+(defun claude-dashboard-refresh ()
+  "Fetch fresh data from grove and re-render (two-tier)."
+  ;; Tier 1: instant, no git calls
+  (claude-grove-repo-list
+   (lambda (ok data error-msg)
+     (if (not ok)
+         (claude-dashboard--render-error error-msg)
+       ;; Update cache with tier 1 data, render immediately
+       (setq claude-dashboard--grove-cache data)
+       (claude-dashboard--paint)
+       ;; Tier 2: fire per-workspace status calls in parallel
+       (dolist (repo data)
+         (dolist (ws (plist-get repo :workspaces))
+           (when (equal (plist-get ws :status) "active")
+             (claude-grove-workspace-status
+              (plist-get ws :branch)
+              (lambda (ok status-data _err)
+                (when ok
+                  (claude-dashboard--merge-workspace-status status-data)
+                  (claude-dashboard--paint)))))))))))
+
+(defun claude-dashboard--merge-workspace-status (status-data)
+  "Merge tier 2 STATUS-DATA into `claude-dashboard--grove-cache'."
+  ;; Find the matching workspace in cache by ID, replace its :repos
+  ;; with the detailed per-repo data from tier 2.
+  ...)
+
+(defun claude-dashboard--paint ()
+  "Paint the dashboard buffer from cache. Fast, no I/O."
+  (let* ((data      claude-dashboard--grove-cache)
+         (attention (claude-dashboard--collect-attention))
+         (collapsed claude-dashboard--collapsed-repos)
          (inhibit-read-only t))
-    ;; 2. Clear and rebuild
+    ;; 1. Clear and rebuild
     (erase-buffer)
-    ;; 3. Title
+    ;; 2. Title
     (claude-dashboard--insert-title)
-    ;; 4. Each repo section
-    (dolist (repo grove-data)
-      (claude-dashboard--insert-repo-section repo attention))
-    ;; 5. Footer
+    ;; 3. Each repo section (skip children if collapsed)
+    (dolist (repo data)
+      (claude-dashboard--insert-repo-section repo attention collapsed))
+    ;; 4. Footer
+    (claude-dashboard--insert-footer)
+    ;; 5. Clean up orphaned Doom workspaces
+    (claude-dashboard--cleanup-orphans data)))
+
+(defun claude-dashboard--render-error (error-msg)
+  "Show error state — e.g., grove not installed."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (claude-dashboard--insert-title)
+    (insert "\n  " (propertize error-msg 'face 'claude-dashboard-error-face))
+    (when (string-match-p "not found" error-msg)
+      (insert "\n\n  Install grove: npm install -g @twiglylabs/grove"))
     (claude-dashboard--insert-footer)))
 ```
+
+**What renders before tier 2 completes:**
+- Repo headers — full (from tier 1)
+- Worktree entries — branch name, status, attention indicator (from tier 1 + monitor)
+- Commit counts — omitted until tier 2 (no placeholder, column just absent)
+- Sub-repo details — omitted until tier 2 (section appears when data arrives)
+
+This avoids loading spinners or placeholder text — the dashboard simply shows what it knows, then fills in details as they arrive.
+
+### Collapse/Expand State
+
+```elisp
+(defvar-local claude-dashboard--collapsed-repos nil
+  "Set of repo names whose sections are collapsed.
+Persists across refreshes (buffer-local, not buffer-content).")
+```
+
+TAB on a repo header toggles its name in this set. The rendering pipeline checks the set and skips worktree/sub-repo entries for collapsed repos. Since this is buffer-local state (not stored in the buffer text), it survives erase-and-rebuild refreshes.
 
 Each section renderer inserts propertized text with:
 - `claude-dashboard-entry-type` property (`repo` | `worktree` | `subrepo` | `button`)

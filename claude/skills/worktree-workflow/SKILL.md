@@ -136,7 +136,14 @@ Use Write tool to update `.workflow-state.json` after each phase.
    fi
    ```
 2. Verify plan exists at `plans/active/{plan-name}/`
-3. Initialize state file:
+3. **Mark plan in-progress (trellis):** If trellis is available, mark the plan as in-progress:
+   ```bash
+   # Skip silently if trellis not installed or plan not tracked
+   if command -v trellis &>/dev/null; then
+     trellis show {plan-name} &>/dev/null && trellis update {plan-name} in_progress
+   fi
+   ```
+4. Initialize state file:
    ```json
    {
      "plan": "{plan-name}",
@@ -146,9 +153,9 @@ Use Write tool to update `.workflow-state.json` after each phase.
      "reachIterations": 0
    }
    ```
-4. **INVOKE:** gremlins:plan-readiness-review
-5. Present markdown summary
-6. Wait for user to approve or request changes
+5. **INVOKE:** gremlins:plan-readiness-review
+6. Present markdown summary
+7. Wait for user to approve or request changes
 
 **If READY:** User says "looks good" → advance to implement phase
 **If NEEDS WORK:** User fixes issues → re-run review
@@ -269,7 +276,15 @@ git merge "origin/$base_branch" -m "Merge $base_branch into $(git branch --show-
 
 1. **INVOKE:** gremlins:plan-complete (moves plan from active/ to complete/)
 
-2. Update state:
+2. **Mark plan done (trellis):** If trellis is available, mark the plan as done:
+   ```bash
+   # Skip silently if trellis not installed or plan not tracked
+   if command -v trellis &>/dev/null; then
+     trellis show {plan-name} &>/dev/null && trellis update {plan-name} done
+   fi
+   ```
+
+3. Update state:
 ```json
 {
   "phase": "complete",
@@ -277,7 +292,7 @@ git merge "origin/$base_branch" -m "Merge $base_branch into $(git branch --show-
 }
 ```
 
-3. Report: "Workflow complete for {plan-name}. Plan moved to complete/."
+4. Report: "Workflow complete for {plan-name}. Plan moved to complete/."
 
 ## Abort Command
 
@@ -360,8 +375,3 @@ git merge "origin/$base_branch" -m "Merge $base_branch into $(git branch --show-
 - gremlins:finishing-a-development-branch (completion)
 - gremlins:plan-complete (moves plan to complete/)
 
-**Prerequisite:**
-- gremlins:using-git-worktrees - Creates the worktree first
-
-**Assumption:**
-- Plan committed to repo before worktree created

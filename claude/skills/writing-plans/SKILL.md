@@ -98,6 +98,31 @@ git commit -m "feat: add specific feature"
 - Reference relevant skills with gremlins: prefix
 - DRY, YAGNI, TDD, frequent commits
 
+## Trellis Frontmatter (Conditional)
+
+After saving the plan, check if the repo uses trellis for plan tracking:
+
+```bash
+# Only emit frontmatter if trellis is configured
+test -f .trellis || trellis lint &>/dev/null
+```
+
+If trellis is present, create/update `plans/active/{plan-name}/README.md` with frontmatter:
+
+```yaml
+---
+title: Plan Title
+status: not_started
+depends_on: []
+tags: []
+repo: <repo-name>
+---
+```
+
+Populate `repo` from `basename $(git rev-parse --show-toplevel)`. Leave `depends_on` and `tags` empty unless the user specifies dependencies.
+
+If no `.trellis` config exists, skip this step silently.
+
 ## Execution Handoff
 
 After saving the plan, offer execution choice:

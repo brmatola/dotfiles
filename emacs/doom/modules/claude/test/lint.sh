@@ -1,11 +1,6 @@
 #!/bin/bash
 # Lint Claude module elisp files
-# Usage: ./test/lint.sh [--fix]
-#
-# Checks:
-# - Byte compilation warnings (excluding expected runtime-only warnings)
-# - Lexical binding header
-# - Provides statement matches filename
+# Usage: ./test/lint.sh
 
 set -e
 
@@ -19,16 +14,11 @@ echo ""
 
 ERRORS=0
 
-# Files to lint (excluding test files for byte-compile)
+# Files to lint
 FILES=(
-    "claude-state.el"
-    "claude-vterm.el"
-    "claude-reconcile.el"
-    "claude-worktree.el"
-    "claude-workspace.el"
+    "claude-grove.el"
     "claude-monitor.el"
     "claude-dashboard.el"
-    "claude-cleanup.el"
     "claude.el"
 )
 
@@ -53,14 +43,13 @@ for f in "${FILES[@]}"; do
 done
 echo ""
 
-# Byte-compile check (standalone files only)
-# Note: Some files require vterm/Doom at runtime - we check what we can
+# Byte-compile check
 echo "Checking byte compilation..."
 
-# These files can be byte-compiled standalone
+# Standalone files (no deps)
 STANDALONE_FILES=(
-    "claude-state.el"
-    "claude-vterm.el"
+    "claude-grove.el"
+    "claude-monitor.el"
 )
 
 for f in "${STANDALONE_FILES[@]}"; do
@@ -70,7 +59,6 @@ for f in "${STANDALONE_FILES[@]}"; do
         --eval "(setq load-path (cons \".\" load-path))" \
         --eval "(byte-compile-file \"$f\")" 2>&1 || true)
 
-    # Filter out expected warnings (runtime dependencies)
     filtered=$(echo "$output" | grep -E "Error:" | grep -v "not known to be defined" || true)
 
     if [[ -n "$filtered" ]]; then
@@ -79,30 +67,23 @@ for f in "${STANDALONE_FILES[@]}"; do
     fi
 done
 
-# Files that need claude-state loaded first
-DEPENDENT_FILES=(
-    "claude-reconcile.el"
-    "claude-worktree.el"
-)
+# Files that need dependencies
+echo "  claude-dashboard.el (with dependencies)"
+output=$(emacs --batch -Q \
+    --eval "(setq byte-compile-error-on-warn t)" \
+    --eval "(setq load-path (cons \".\" load-path))" \
+    -l claude-grove.el \
+    -l claude-monitor.el \
+    --eval "(byte-compile-file \"claude-dashboard.el\")" 2>&1 || true)
 
-for f in "${DEPENDENT_FILES[@]}"; do
-    echo "  $f (with dependencies)"
-    output=$(emacs --batch -Q \
-        --eval "(setq byte-compile-error-on-warn t)" \
-        --eval "(setq load-path (cons \".\" load-path))" \
-        -l claude-state.el \
-        --eval "(byte-compile-file \"$f\")" 2>&1 || true)
+filtered=$(echo "$output" | grep -E "Error:" | \
+    grep -v "not known to be defined" | \
+    grep -v "reference to free variable" || true)
 
-    # Filter expected runtime-only warnings
-    filtered=$(echo "$output" | grep -E "Error:" | \
-        grep -v "not known to be defined" | \
-        grep -v "reference to free variable" || true)
-
-    if [[ -n "$filtered" ]]; then
-        echo "$filtered"
-        ERRORS=$((ERRORS + 1))
-    fi
-done
+if [[ -n "$filtered" ]]; then
+    echo "$filtered"
+    ERRORS=$((ERRORS + 1))
+fi
 
 echo ""
 

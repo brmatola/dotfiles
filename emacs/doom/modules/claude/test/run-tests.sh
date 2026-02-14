@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run all Claude module tests
-# Usage: ./test/run-tests.sh [--verbose]
+# Usage: ./test/run-tests.sh
 
 set -e
 
@@ -36,14 +36,11 @@ run_test_file() {
     echo ""
 }
 
-# Unit tests - claude-state
-run_test_file "claude-state-test" "-l claude-state.el" "test/claude-state-test.el"
+# Grove wrapper + monitor tests
+run_test_file "claude-grove-test" "-l claude-grove.el -l claude-monitor.el" "test/claude-grove-test.el"
 
-# Unit tests - claude-reconcile (needs vterm stubs)
-run_test_file "claude-reconcile-test" "-l claude-state.el -l claude-vterm.el -l claude-reconcile.el" "test/claude-reconcile-test.el"
-
-# Integration tests
-run_test_file "claude-test" "-l claude-state.el -l claude-worktree.el" "test/claude-test.el"
+# Dashboard rendering tests
+run_test_file "claude-dashboard-test" "-l claude-grove.el -l claude-monitor.el -l claude-dashboard.el" "test/claude-dashboard-test.el"
 
 echo "=== Results ==="
 echo "$PASSED/$TOTAL test suites passed"

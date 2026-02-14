@@ -2,41 +2,37 @@
 
 Last updated: 2026-02-14
 
-## Global Keybindings (available everywhere)
+## Global Keybinding
 
-Under `SPC C` prefix:
+One binding to rule them all:
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `SPC C m` | `claude-goto-main` | Jump to main workspace, focus dashboard |
-| `SPC C d` | `claude-dashboard-open` | Open dashboard in current workspace (fallback) |
+| `SPC =` | `claude-goto-main` | Jump to main workspace, focus dashboard |
 
-`SPC C m` is the primary navigation key. It:
-1. Switches to the main Doom workspace
+`SPC =` is the only global keybinding. It:
+1. Switches to the main Doom workspace (`claude:main`)
 2. If dashboard buffer doesn't exist, creates it
 3. If dashboard buffer exists, switches to it
 4. Triggers a refresh
 
+Everything else happens through buffer-local keybindings once you're in the dashboard.
+
 ### Removed / Changed
 
-The current `SPC C` map has workspace-specific bindings (create, close, home, etc.). These move into the dashboard as contextual actions rather than global keybindings. Simplifies the keymap significantly.
+The current `SPC C` map has workspace-specific bindings (create, close, home, etc.). These move into the dashboard as contextual actions. The entire `SPC C` prefix is eliminated.
 
 | Current | Replacement |
 |---------|-------------|
 | `SPC C h` (create home workspace) | Dashboard: `RET` on repo |
 | `SPC C c` (create worktree) | Dashboard: `c` on repo |
 | `SPC C k` (close workspace) | Dashboard: `x` on worktree |
-| `SPC C d` (open dashboard) | `SPC C m` (go to main) |
+| `SPC C d` (open dashboard) | `SPC =` |
+| `SPC C m` (go to main) | `SPC =` |
 
-The dashboard becomes the single entry point for all workspace operations. Fewer global keybindings to remember.
+### Why `SPC =`
 
-## Workspace-Local Keybindings
-
-Inside a worktree or home workspace, minimal keys:
-
-| Key | Action | Description |
-|-----|--------|-------------|
-| `SPC C m` | `claude-goto-main` | Back to main/dashboard |
-| `SPC C t` | `claude-open-terminal` | Open a terminal in this workspace |
-
-Everything else is done from the dashboard.
+- `SPC ;` conflicts with Doom's `eval-expression`
+- `=` is unbound in Doom's default `SPC` map
+- One key to remember: "go to dashboard"
+- All workspace operations are contextual within the dashboard (buffer-local keys)

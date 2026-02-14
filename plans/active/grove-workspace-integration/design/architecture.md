@@ -38,36 +38,40 @@ claude.el                # MODIFY — entry point, global keybindings
 
 ## claude-grove.el — Grove CLI Wrapper
 
-Thin layer: shell out, parse JSON, return elisp data. All grove interaction goes through here.
+Thin layer: shell out, parse JSON, return elisp data. All grove interaction goes through here. **All calls are async** — no synchronous shell-outs, so Emacs never blocks.
 
 ### Interface
 
 ```elisp
-;; Synchronous (for quick reads)
-(claude-grove-repo-list)           ; → parsed JSON from `grove repo list --json`
-(claude-grove-workspace-status id) ; → parsed JSON from `grove workspace status --json`
-
-;; Asynchronous (for mutations that take time)
+;; All calls are async with callbacks
+(claude-grove-repo-list callback)                    ; `grove repo list --json`
+(claude-grove-workspace-status branch callback)      ; `grove workspace status <branch> --json`
 (claude-grove-workspace-create repo-path branch callback)
 (claude-grove-workspace-sync branch callback)
 (claude-grove-workspace-close branch mode callback)  ; mode = 'merge | 'discard
+(claude-grove-workspace-switch branch callback)      ; `grove workspace switch <branch> --json`
 (claude-grove-repo-add path callback)
+(claude-grove-repo-remove name callback)
 
 ;; Callback signature: (lambda (ok data error-msg) ...)
+
+;; Guard against overlapping calls
+(claude-grove--request-pending-p command)  ; → t if a call of this type is in-flight
 ```
 
 ### Implementation Notes
 
-- Sync calls use `shell-command-to-string` — fine for reads that return in <100ms
-- Async calls use `make-process` with a sentinel — for creates/syncs that may take seconds
+- All calls use `make-process` with a sentinel — Emacs never blocks on grove
 - JSON parsing via `json-parse-string` with `:object-type 'plist`
-- Error handling: check exit code, parse error envelope, pass to callback or signal
+- Error handling: check exit code, parse error envelope, pass to callback
+- **In-flight guard**: `claude-grove-repo-list` tracks whether a call is pending. If the refresh timer fires while a previous `repo list` is still running, the new call is skipped. This prevents queuing up slow calls.
+- **Timeout**: Each process gets a kill timer (default 10s, configurable via `claude-grove-timeout`). If grove doesn't respond, the process is killed and the callback is invoked with an error. Prevents stuck dashboard on grove hang.
 - Binary location: check `grove` in PATH, configurable via `claude-grove-executable`
-- If grove not found: all functions return nil / call callback with error, dashboard shows install instructions
+- If grove not found: callback called with `(nil nil "grove not found")`, dashboard shows install instructions
 
 ## claude-monitor.el — Attention Detection
 
-Kept modular. Dashboard doesn't know how detection works — just queries status.
+Kept modular. Dashboard doesn't know how detection works — just queries status. **No modeline** — the dashboard is the sole UI for workspace status.
 
 ### Interface
 
@@ -79,6 +83,10 @@ Kept modular. Dashboard doesn't know how detection works — just queries status
   "Hook run when any workspace's attention status changes.
 Called with (workspace-name new-status).")
 ```
+
+### vterm Buffer Naming Convention
+
+vterm buffers follow the pattern `*claude:<repo>:<branch>*` (e.g., `*claude:acorn:feature-auth*`). This is the contract between the dashboard (creates buffers) and the monitor (finds them by name to check output). For home workspaces, the buffer is `*claude:<repo>:home*`.
 
 ### Current Detection Mechanism
 
@@ -92,6 +100,7 @@ The big module. Handles:
 - vterm buffer management (create/kill)
 - User interaction (keybindings, mouse, buttons)
 - Auto-refresh (timer + event-driven)
+- Orphan Doom workspace cleanup (grove worktree gone → clean up Doom workspace)
 
 ### Dashboard Mode
 
@@ -133,7 +142,7 @@ The "main" workspace is a Doom workspace named `claude:main`. It's not tied to a
 ```
 User hits RET on "acorn"
   → Check if Doom workspace "acorn:home" exists
-  → If not: create it, set default-directory to acorn path
+  → If not: create it, set default-directory to repo path (from grove cache)
   → Switch to "acorn:home"
   → Open dired or find-file in that workspace
 ```
@@ -145,11 +154,13 @@ User hits 'c' on "acorn", types "feature-auth"
   → claude-grove-workspace-create (async)
   → On success:
     → Create Doom workspace "acorn:feature-auth"
-    → Set default-directory to worktree root
-    → Create vterm buffer, launch Claude
+    → Set default-directory to worktree root (from grove response `data.root`)
+    → Create vterm buffer "*claude:acorn:feature-auth*"
+    → Launch `claude` in vterm with default-directory set to worktree root
+      (No arguments — user gives Claude instructions interactively)
     → Refresh dashboard
   → On error:
-    → Show error in minibuffer or popup
+    → message "Grove: create failed — %s" in minibuffer
     → Refresh dashboard (may show failed state)
 ```
 
@@ -160,11 +171,11 @@ User hits 'x' on "feature-auth"
   → Prompt: [m]erge or [d]iscard?
   → claude-grove-workspace-close (async)
   → On success:
-    → Kill vterm buffers for that workspace
+    → Kill vterm buffer "*claude:acorn:feature-auth*"
     → Delete Doom workspace "acorn:feature-auth"
     → Refresh dashboard (entry disappears)
   → On error:
-    → Show error message
+    → message "Grove: close failed — %s" in minibuffer
     → Refresh dashboard (may show failed state)
 ```
 
@@ -175,7 +186,26 @@ User hits 's' on "feature-auth"
   → claude-grove-workspace-sync (async)
   → On success: refresh dashboard (sync status clears)
   → On conflict:
-    → Show conflict details in minibuffer/popup
+    → message "Grove: conflicts in %s — %s" in minibuffer
     → Jump to the conflicted worktree workspace
     → User/Claude resolves, re-syncs from dashboard
 ```
+
+### Orphan Cleanup (on refresh)
+
+```
+On every dashboard refresh:
+  → Compare active Doom workspaces matching "repo:branch" pattern
+    against grove repo list data
+  → If a Doom workspace exists but no matching grove worktree:
+    → Kill associated vterm buffers
+    → Delete the orphaned Doom workspace
+    → (Handles worktrees closed outside Emacs via CLI)
+  → Skip workspaces in transient states (creating, closing):
+    → These are mid-operation — not orphans
+    → Only treat as orphan if workspace is completely absent from grove data
+```
+
+### Error Display
+
+All grove errors use `message` (minibuffer). Format: `"Grove: <action> failed — <error>"`. No popups, no dedicated error area. The minibuffer is visible, non-intrusive, and consistent with Emacs conventions.

@@ -33,7 +33,7 @@ Main (pure control plane — dashboard, no repo)
  └── trellis (home workspace — edit code)
 ```
 
-**Main** = Dashboard-only workspace. Not tied to a repo. Pure orchestration UI. This is where you live when you're not actively in a workspace. `SPC C m` always brings you here.
+**Main** = Dashboard-only workspace. Not tied to a repo. Pure orchestration UI. This is where you live when you're not actively in a workspace. `SPC ;` always brings you here.
 
 **Home workspaces** = Tied to a repo's main branch. For editing, planning, manual testing, running Claude for orchestration. Opened from the dashboard.
 
@@ -42,20 +42,21 @@ Main (pure control plane — dashboard, no repo)
 ### Data Flow
 
 ```
-grove repo list --json
-       │
-       │  Returns: repos + their workspaces + per-repo status
-       ▼
-claude-grove.el (parses JSON, caches result)
-       │
-       ▼
-claude-dashboard.el (renders buffer with tree layout)
-       │
-       ├── Reads: grove data (structure, commits, dirty status)
+claude-dashboard.el  →  claude-grove.el  →  grove repo list --json   (tier 1, instant)
+       │                      │                     │
+       │                      │                     │  Returns: repos + workspace summaries
+       │                      │                     │           (no git stats)
+       │                      │                     ▼
+       │                      ├──────────→  grove workspace status --json
+       │                      │              (tier 2, per workspace, has git stats)
+       │                      │                     │
+       │                      │                     │  Returns: per-repo dirty/commit counts
+       │                      │                     ▼
+       ├── Renders from cache (updated progressively by both tiers)
        └── Reads: claude-monitor.el (attention status per vterm buffer)
 ```
 
-**Single grove call populates entire dashboard.** Emacs adds only the attention status (working/idle/error) which comes from vterm buffer monitoring.
+**Two-tier progressive loading.** Emacs never blocks on grove. Tier 1 (`grove repo list --json`) is instant — reads state files only, returns repo names and workspace summaries with no git stats. The dashboard renders immediately from tier 1 data (branch names, workspace status, attention indicators). Tier 2 (`grove workspace status <branch> --json`) fires in parallel for each active workspace and fills in commit counts and per-repo dirty/clean status as callbacks arrive. Each tier-2 callback updates the cache and triggers a re-render. The re-render is fast (no I/O — just repaints from cache), so multiple re-renders as tier-2 data trickles in are fine. Attention status (working/idle/error) comes from vterm buffer monitoring — always local and fast.
 
 ### Attention Model
 
