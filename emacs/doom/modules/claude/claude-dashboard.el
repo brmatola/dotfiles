@@ -1086,9 +1086,9 @@ Returns list of plists (:id ... :title ...) or nil."
                 (cond
                  ((string-empty-p choice)
                   (user-error "Branch name cannot be empty"))
-                 ;; Matched a plan candidate — extract the ID
+                 ;; Matched a plan candidate — extract the ID, flatten slashes
                  ((member choice candidates)
-                  (car (split-string choice " — ")))
+                  (replace-regexp-in-string "/" "-" (car (split-string choice " — "))))
                  ;; Free-form input — use as branch name directly
                  (t choice)))
             (read-string (format "Branch name (in %s): " name)))))
