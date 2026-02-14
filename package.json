@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "./emacs/doom/modules/claude/test/run-tests.sh",
+    "lint": "./emacs/doom/modules/claude/test/lint.sh"
+  }
+}

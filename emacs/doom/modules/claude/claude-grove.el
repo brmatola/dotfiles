@@ -53,7 +53,10 @@ is still in-flight."
     (funcall callback nil nil "grove not found"))
    ;; Run the command
    (t
-    (let* ((exe (executable-find claude-grove-executable))
+    (let* ((default-directory (if (file-directory-p default-directory)
+                                  default-directory
+                                (expand-file-name "~")))
+           (exe (executable-find claude-grove-executable))
            (output-buffer (generate-new-buffer " *grove-output*"))
            (command-args (append (list exe) args (list "--json")))
            (proc (make-process
@@ -92,25 +95,32 @@ is still in-flight."
               (funcall callback nil nil
                        (or (claude-grove--extract-error output)
                            (format "grove process %s" (string-trim event)))))
-          ;; Success — parse JSON
-          (let ((output (when (buffer-live-p output-buffer)
-                          (with-current-buffer output-buffer
-                            (buffer-string)))))
+          ;; Success — parse JSON, then invoke callback outside condition-case
+          ;; to prevent double-callback if the callback itself throws.
+          (let* ((output (when (buffer-live-p output-buffer)
+                           (with-current-buffer output-buffer
+                             (buffer-string))))
+                 (parsed nil)
+                 (parse-error nil))
             (condition-case err
-                (let* ((json-object-type 'plist)
-                       (json-key-type 'keyword)
-                       (parsed (json-parse-string output
+                (let ((json-object-type 'plist)
+                      (json-key-type 'keyword))
+                  (setq parsed (json-parse-string output
                                                   :object-type 'plist
                                                   :null-object nil
                                                   :false-object nil)))
-                  (if (eq (plist-get parsed :ok) t)
-                      (funcall callback t (plist-get parsed :data) nil)
-                    (funcall callback nil nil
-                             (or (plist-get parsed :error)
-                                 "grove returned ok: false"))))
               (error
-               (funcall callback nil nil
-                        (format "JSON parse error: %s" (error-message-string err)))))))
+               (setq parse-error (error-message-string err))))
+            (cond
+             (parse-error
+              (funcall callback nil nil
+                       (format "JSON parse error: %s" parse-error)))
+             ((eq (plist-get parsed :ok) t)
+              (funcall callback t (plist-get parsed :data) nil))
+             (t
+              (funcall callback nil nil
+                       (or (plist-get parsed :error)
+                           "grove returned ok: false"))))))
       ;; Clean up output buffer
       (when (buffer-live-p output-buffer)
         (kill-buffer output-buffer)))))

@@ -13,6 +13,8 @@ This repository is the **single source of truth** for my computer configuration.
 ## Commands
 
 ```bash
+npm test                  # Run all Emacs module tests
+npm run lint              # Lint Emacs module elisp files
 ./install.sh              # Full setup: brew, symlinks, doom sync
 brew bundle dump --file=Brewfile --force  # Capture new brew packages
 doom sync                 # After changing Doom config
@@ -61,22 +63,11 @@ doom sync                 # After changing Doom config
 
 Development standards for the Claude module and other Emacs Lisp code.
 
-### Testing
+### Testing & Linting
 
 ```bash
-# Run all tests
-./emacs/doom/modules/claude/test/run-tests.sh
-
-# Run individual test file
-cd emacs/doom/modules/claude
-emacs --batch -l ert -l claude-grove.el -l claude-monitor.el -l test/claude-grove-test.el -f ert-run-tests-batch-and-exit
-```
-
-### Linting
-
-```bash
-# Check for byte-compile warnings, missing headers, etc.
-./emacs/doom/modules/claude/test/lint.sh
+npm test          # Run all tests
+npm run lint      # Byte-compile checks, missing headers, etc.
 ```
 
 ### Module Structure

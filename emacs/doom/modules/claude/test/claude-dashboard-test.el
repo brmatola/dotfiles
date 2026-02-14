@@ -69,6 +69,31 @@
     (should (string-match-p "no active workspaces" (buffer-string)))
     (should (string-match-p "New Worktree" (buffer-string)))))
 
+(ert-deftest claude-dashboard-test-home-attention-indicator ()
+  "Test that repo header shows attention status for home session."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (setq claude-dashboard--grove-cache
+          (claude-dashboard-test--make-grove-data
+           (claude-dashboard-test--make-repo "myrepo" "/tmp/myrepo")))
+    ;; No home session — no status indicator
+    (claude-dashboard--paint)
+    (should-not (string-match-p "working\\|waiting" (buffer-string)))
+    ;; Simulate active home session (working)
+    (let ((home-buf (get-buffer-create "*claude:myrepo:home*")))
+      (unwind-protect
+          (progn
+            (with-current-buffer home-buf
+              (setq claude--needs-attention nil))
+            (claude-dashboard--paint)
+            (should (string-match-p "working" (buffer-string)))
+            ;; Simulate needs attention (waiting)
+            (with-current-buffer home-buf
+              (setq claude--needs-attention t))
+            (claude-dashboard--paint)
+            (should (string-match-p "waiting" (buffer-string))))
+        (kill-buffer home-buf)))))
+
 (ert-deftest claude-dashboard-test-paint-repo-with-workspaces ()
   "Test rendering a repo with active workspaces."
   (with-temp-buffer

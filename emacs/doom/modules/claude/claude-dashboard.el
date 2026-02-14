@@ -392,12 +392,18 @@ Batches rapid tier 2 arrivals into a single repaint."
       (setq ws-list (claude-dashboard--sort-workspaces ws-list name)))
     ;; Repo header line
     (insert "\n")
-    (let ((line-start (point)))
+    (let ((line-start (point))
+          (home-attention (claude-workspace-attention
+                           (format "%s:home" name))))
       (insert "   "
               (propertize name
                           'face (if has-workspaces
                                     'claude-dashboard-repo-face
                                   'claude-dashboard-repo-dim-face)))
+      ;; Home session status (when a claude session is active)
+      (when home-attention
+        (insert "  ")
+        (claude-dashboard--insert-status "active" home-attention))
       ;; Right-aligned Open button
       (claude-dashboard--insert-right-aligned
        (propertize " Open "
