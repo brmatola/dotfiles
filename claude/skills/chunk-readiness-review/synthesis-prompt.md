@@ -18,6 +18,10 @@ You are synthesizing adversarial reviews across chunks. Individual chunks have b
 **Cohesion Verdicts:**
 {{cohesionVerdicts}}
 
+## Critical Constraint
+
+**Do NOT write Python, jq, or any scripts.** Read files with the Read tool. Write your findings as markdown. No JSON output.
+
 ## Instructions
 
 1. **Boundary Cohesion**
@@ -26,7 +30,7 @@ You are synthesizing adversarial reviews across chunks. Individual chunks have b
    - Flag mismatches in naming, types, assumptions, or expectations.
 
 2. **Workset Justification**
-   - Look at the cohesion verdicts. If multiple chunks are `loosely_coupled` or `forced_grouping`, consider whether the chunk boundaries should move.
+   - Look at the cohesion verdicts. If multiple chunks are `loosely coupled` or `forced grouping`, consider whether the chunk boundaries should move.
    - Would merging two chunks create a more natural unit?
    - Would splitting a chunk reduce coupling?
    - Are there plans that belong in a different chunk?
@@ -42,28 +46,40 @@ You are synthesizing adversarial reviews across chunks. Individual chunks have b
 
 ## Output Format
 
-Return ONLY a JSON object (no markdown fences, no preamble). Schema:
+Return your synthesis as structured markdown. Use EXACTLY this format:
 
-    {
-      "crossChunkFindings": [
-        {
-          "type": "boundary_mismatch | regrouping_needed | missing_chunk | assumption_conflict",
-          "severity": "error | warning | info",
-          "plans": ["<plan-id>", ...],
-          "chunks": ["<chunk-id>", ...],
-          "description": "What's wrong across chunk boundaries",
-          "impact": "What breaks if this isn't fixed",
-          "suggestion": "How to restructure or fix",
-          "category": "boundary_cohesion | workset_justification | missing_chunks | assumption_conflicts"
-        }
-      ],
-      "overallVerdict": "READY | NEEDS_WORK | REGROUP",
-      "verdictReason": "1-2 sentence justification",
-      "summary": "Cross-chunk synthesis: <N> edges checked, <findings> issues. <brief>."
-    }
+```
+## Cross-Chunk Synthesis
+
+### Overall Verdict: READY | NEEDS WORK | REGROUP
+
+{1-2 sentence justification. Verdict should be the worst case — if any chunk needs regrouping, verdict is REGROUP.}
+
+### Findings
+
+#### Errors
+
+- **[{category}]** Chunks: {chunk-ids}, Plans: {plan-ids} — {description}
+  **Impact:** {what breaks if not fixed}
+  **Suggestion:** {how to restructure or fix}
+
+#### Warnings
+
+- **[{category}]** Chunks: {chunk-ids}, Plans: {plan-ids} — {description}
+  **Impact:** {impact}
+  **Suggestion:** {fix}
+
+#### Info
+
+- **[{category}]** Chunks: {chunk-ids}, Plans: {plan-ids} — {description}
+  **Suggestion:** {fix}
+
+### Summary
+
+Cross-chunk synthesis: {N} edges checked, {findings} issues. {brief}.
+```
 
 Important:
-- Return raw JSON only, no markdown code fences
-- `overallVerdict` should be the worst case — if any chunk needs regrouping, verdict is REGROUP
+- Use category names: `boundary_cohesion`, `workset_justification`, `missing_chunks`, `assumption_conflicts`
 - Be specific about which plans and chunks are involved
-- If no issues found, return empty `crossChunkFindings` array with verdict READY
+- If no issues found, write "None" under each finding section and use verdict READY

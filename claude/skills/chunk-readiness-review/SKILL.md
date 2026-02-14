@@ -19,13 +19,17 @@ Adversarial critique of chunk content. Dispatches subagents to actively break pl
 /chunk-readiness-review core-data    # review a single chunk
 ```
 
+## Critical Constraint: No Scripts
+
+**Do NOT write Python, jq, or any scripts to process data.** You can read JSON output from commands directly — extract what you need by reading it. All output is markdown. Work in your strongest modality: reading text, writing prose.
+
 ## The Process
 
 ### Phase 0: Discover Chunks
 
-Run `trellis chunks --json` via Bash. Parse the JSON output.
+Run `trellis chunks --json` via Bash. Read the JSON output directly — you can extract chunk IDs, plan paths, edges, and line counts from the text without any scripting.
 
-If a specific chunk name was passed as argument, filter to only that chunk.
+If a specific chunk name was passed as argument, focus on only that chunk.
 
 If the command fails, stop immediately — `trellis` must be available.
 
@@ -33,44 +37,39 @@ If the command fails, stop immediately — `trellis` must be available.
 
 For each chunk, dispatch a `sonnet-general-purpose` subagent via the Task tool. All chunk agents run **in parallel** (multiple Task calls in one message).
 
-Each subagent receives a prompt built from `./chunk-critique-prompt.md` with these interpolated values:
+Each subagent receives a prompt built from `./chunk-critique-prompt.md`. Interpolate these values by reading them from the trellis output:
 - `{{chunkId}}` — the chunk's ID
 - `{{planList}}` — newline-separated list of `planId: filePath` entries
 - `{{internalEdges}}` — the chunk's internal dependency edges as `from -> to` lines
 - `{{crossChunkEdges}}` — cross-chunk edges touching this chunk
 - `{{totalLines}}` — total line count for the chunk
 
-The subagent reads plan files and runs **4 adversarial passes** — cohesion, assumptions, edge cases, and complexity traps.
+The subagent reads plan files and runs **4 adversarial passes** — cohesion, assumptions, edge cases, and complexity traps. Each subagent returns **structured markdown** findings (see chunk-critique-prompt.md for format).
 
-Each subagent returns structured JSON findings. Parse the JSON from the agent's response.
-
-**Error handling:** If a subagent fails, log to stderr and record as a finding with `type: "review_error"`. Don't block other chunks.
+**Error handling:** If a subagent fails, note it as a finding in the report. Don't block other chunks.
 
 ### Phase 2: Cross-Chunk Synthesis
 
-Read all chunk summaries and boundary notes.
+Read all chunk review results and boundary notes.
 
 If there are more than 3 chunks, dispatch an `opus-general-purpose` subagent. Otherwise, perform synthesis in the main context.
 
-The synthesis logic receives a prompt built from `./synthesis-prompt.md` and checks:
+The synthesis uses the prompt from `./synthesis-prompt.md` and checks:
 - **Boundary cohesion:** Do connected chunks agree on what crosses boundaries?
 - **Workset justification:** Should any chunk be regrouped?
 - **Missing chunks:** Is there a chunk-shaped gap nobody covers?
 
 ### Phase 3: Report
 
-1. **Deduplicate findings:** Same `type` + same `plans` set + same `category` = duplicate. Keep higher severity.
+Compose the final report as markdown and write it to `plans/.review/readiness/latest.md`.
 
-2. **Write reports:**
-   - `plans/.review/readiness/latest.md` — human-readable summary
-   - `plans/.review/readiness/latest.json` — full structured report
-   - `plans/.review/readiness/chunks/{chunkId}.json` — per-chunk cached reports
+Auto-add `plans/.review/` to `.gitignore` if missing.
 
-3. **Gitignore:** Auto-add `plans/.review/` to `.gitignore` if missing.
+When writing the report, naturally consolidate duplicate findings (same category affecting the same plans). Keep the higher severity version.
 
-4. **Sort findings:** severity (error > warning > info), then chunk, then first plan ID.
+Order findings: errors first, then warnings, then info. Within each severity, group by chunk.
 
-### Human-Readable Report Format
+### Report Format
 
 ```markdown
 # Chunk Readiness Review
@@ -78,6 +77,8 @@ Generated: {timestamp}
 Chunks reviewed: {N} | Plans reviewed: {N}
 
 ## Verdict: READY | NEEDS WORK | REGROUP
+
+{1-2 sentence justification}
 
 ## Errors ({count})
 
