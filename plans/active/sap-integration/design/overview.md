@@ -26,10 +26,11 @@ With sap, Claude Code hooks emit structured events that sap persists in SQLite. 
 | Component | Before | After |
 |-----------|--------|-------|
 | `claude-monitor.el` | vterm buffer scraping, regex patterns | sap CLI polling, JSON parsing |
-| `claude-dashboard.el` status | working/idle/nil | active/attention/stopped + last tool |
+| `claude-dashboard.el` status | working/idle/nil | active/idle/attention/stopped + last tool |
 | `claude-dashboard.el` actions | Open, Jump, Close | + Resume (for stopped sessions) |
 | Session awareness | None | Duration, session history, resume |
-| Attention detection | Regex on 15 lines | Exact: permission_prompt, idle_prompt events |
+| Attention detection | Regex on 15 lines | Exact: permission_prompt, idle_prompt events + turn-complete for idle |
+| Workspace identity | `repo:home` (synthetic) | `repo:branch` via sap, dashboard resolves branch |
 
 ## Related Documents
 

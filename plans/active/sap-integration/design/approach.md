@@ -32,56 +32,109 @@ Call CALLBACK with (ok data error-msg)."
   )
 ```
 
+#### Internal state table
+
+```elisp
+(defvar claude--workspace-states (make-hash-table :test 'equal)
+  "Hash table mapping workspace name to (STATE . SESSION-PLIST).
+Populated by polling loop, queried by public API.")
+
+(defun claude--get-workspace-state (workspace)
+  "Return state symbol for WORKSPACE, or nil."
+  (car (gethash workspace claude--workspace-states)))
+
+(defun claude--set-workspace-state (workspace session state)
+  "Set STATE and SESSION data for WORKSPACE."
+  (puthash workspace (cons state session) claude--workspace-states))
+
+(defun claude--set-workspace-stopped (workspace)
+  "Mark WORKSPACE as stopped, preserving session data."
+  (when-let ((entry (gethash workspace claude--workspace-states)))
+    (puthash workspace (cons 'stopped (cdr entry))
+             claude--workspace-states)))
+
+(defun claude--each-workspace-state (fn)
+  "Call FN with (workspace session) for each tracked workspace."
+  (maphash (lambda (ws entry) (funcall fn ws (cdr entry)))
+           claude--workspace-states))
+```
+
 #### Polling loop
+
+`sap status` only returns non-stopped sessions. To detect `active` → `stopped` transitions, the poll loop compares the returned workspace set against its internal state table. Any previously-known workspace absent from the response has stopped.
+
+Stale sessions (sap annotates `"stale": true` when `last_event_at` > 10 minutes) are treated as stopped — they represent crashed/orphaned Claude processes.
 
 ```elisp
 (defvar claude-sap-poll-interval 2
   "Seconds between sap status polls.")
 
 (defun claude--poll-sap ()
-  "Poll sap for current session states and update internal state."
+  "Poll sap for current session states and update internal state.
+Detects stopped sessions by absence from sap status response.
+Treats stale sessions as stopped."
   (claude-sap-status
     (lambda (ok data _err)
       (when ok
-        (let ((sessions (plist-get data :sessions)))
+        (let ((sessions (plist-get data :sessions))
+              (seen (make-hash-table :test 'equal)))
+          ;; Process sessions present in response
           (dolist (session sessions)
             (let* ((ws (plist-get session :workspace))
-                   (state (intern (plist-get session :state)))
+                   (stale (eq (plist-get session :stale) t))
+                   (state (if stale 'stopped
+                            (intern (plist-get session :state))))
                    (old-state (claude--get-workspace-state ws)))
-              (claude--set-workspace-state ws session)
+              (puthash ws t seen)
+              (claude--set-workspace-state ws session state)
               (when (not (eq state old-state))
                 (run-hook-with-args 'claude-attention-change-hook
-                                    ws state)))))))))
+                                    ws state))))
+          ;; Detect stopped: known workspaces absent from response
+          (claude--each-workspace-state
+            (lambda (ws _session)
+              (unless (or (gethash ws seen)
+                          (eq (claude--get-workspace-state ws) 'stopped))
+                (claude--set-workspace-stopped ws)
+                (run-hook-with-args 'claude-attention-change-hook
+                                    ws 'stopped)))))))))
 ```
 
 #### State model
 
 Old three-state model:
 - `working` — buffer content changing
-- `idle` — content stable + attention pattern matched
+- `idle` — content stable + attention pattern matched (confusingly named — actually means "needs attention")
 - `nil` — no buffer
 
 New state model (from sap):
 - `active` — Claude is working (session-start, tool-use, user-prompt events)
-- `attention` — Claude needs input (permission_prompt, idle_prompt events)
+- `idle` — Claude finished its turn, awaiting user input (turn-complete event)
+- `attention` — Claude is blocked, needs user action (permission_prompt, idle_prompt events)
 - `stopped` — session ended
 - `nil` — no session for this workspace
 
+**Naming collision:** Old `idle` meant "needs attention." New `idle` means the opposite — Claude is done, your turn. What was `idle` is now `attention`. All callsites in the dashboard that check for `'idle` must change to `'attention` (or `'idle` with new semantics).
+
 #### Public API (preserved for dashboard compatibility)
+
+WORKSPACE parameter uses sap's `repo:branch` format (e.g., `dotfiles:main`). See "Workspace identity bridge" below for how the dashboard maps its naming conventions to this format.
 
 ```elisp
 (defun claude-workspace-attention (workspace)
   "Return attention state for WORKSPACE.
-Returns `active', `attention', `stopped', or nil."
-  ;; Look up workspace in internal state table (populated by polling)
-  )
+WORKSPACE is in sap format: \"repo:branch\".
+Returns `active', `idle', `attention', `stopped', or nil."
+  (car (gethash workspace claude--workspace-states)))
 
 (defun claude-workspace-session (workspace)
-  "Return full session plist for WORKSPACE, or nil."
+  "Return full session plist for WORKSPACE, or nil.
+WORKSPACE is in sap format: \"repo:branch\"."
   ;; Returns the full sap session data including:
-  ;; :session-id, :state, :started-at, :last-event-at,
-  ;; :last-tool, :last-tool-detail
-  )
+  ;; :session_id, :state, :started_at, :last_event_at,
+  ;; :last_tool, :last_tool_detail
+  ;; (key names match JSON — underscored, not hyphenated)
+  (cdr (gethash workspace claude--workspace-states)))
 ```
 
 ### What Stays
@@ -91,7 +144,62 @@ Returns `active', `attention', `stopped', or nil."
 - `claude-monitor-interval` — renamed from poll interval, same purpose
 - Buffer naming convention (`*claude:REPO:BRANCH*`) — still used for vterm management
 
+## Workspace Identity Bridge
+
+sap identifies workspaces as `repo:branch` (resolved from cwd via git). The dashboard uses two naming conventions:
+
+| Dashboard context | Dashboard name | sap name | Match? |
+|-------------------|---------------|----------|--------|
+| Worktree entry | `dotfiles:feature-x` | `dotfiles:feature-x` | Yes |
+| Repo home session | `dotfiles:home` | `dotfiles:main` | **No** |
+
+Worktrees match directly — the branch name is the same in both systems. Home sessions don't — the dashboard uses the synthetic `:home` suffix while sap uses the repo's actual branch.
+
+### Resolution
+
+The dashboard resolves the repo's current branch when querying home session attention. The Doom workspace name (`repo:home`) and vterm buffer name (`*claude:repo:home*`) stay as-is — those are UI labels, not sap queries.
+
+```elisp
+;; Worktree attention — direct match, no change needed
+(claude-workspace-attention (format "%s:%s" repo-name branch))
+
+;; Home attention — resolve actual branch first
+(claude-workspace-attention (format "%s:%s" repo-name (claude-dashboard--repo-branch path)))
+```
+
+`claude-dashboard--repo-branch` resolves the repo's current branch:
+
+```elisp
+(defun claude-dashboard--repo-branch (repo-path)
+  "Return the current branch name for REPO-PATH.
+Synchronous — called once per repo per refresh cycle."
+  (let ((default-directory (file-name-as-directory repo-path)))
+    (string-trim
+     (shell-command-to-string "git rev-parse --abbrev-ref HEAD"))))
+```
+
+This is one `git` call per repo per refresh cycle (~5 second interval). With a small number of registered repos, the overhead is negligible.
+
+### Caching
+
+The resolved branch can be cached alongside the grove data in the dashboard's tier 1 pipeline. Invalidation: re-resolve on each full refresh (tier 1). Branch switches on the main repo are uncommon in worktree-based workflows.
+
 ## claude-dashboard.el Changes
+
+### Repo Header Status (Home Sessions)
+
+The repo header line shows sap status for the home session — same indicators as worktrees. This gives at-a-glance state for everything on the dashboard:
+
+```
+dotfiles  ◇ ready                              [ Open ]
+├  fix-auth  3 commits  ⚡ editing auth.ts      [ Jump ] [ Close ]
+└  add-cache  1 commit  ● waiting              [ Jump ] [ Close ]
+
+sap  ⚡ running tests                           [ Open ]
+  (no active workspaces)
+```
+
+Every repo with an active Claude session shows its state inline on the header. The resolution uses `claude-dashboard--repo-branch` to map the dashboard's `repo:home` naming to sap's `repo:<actual-branch>` (see Workspace Identity Bridge above).
 
 ### Status Indicators
 
@@ -99,50 +207,80 @@ Current indicator logic (lines 537-561 of dashboard) maps to new states:
 
 ```
 active    → ⚡ working (success face)
-attention → ● waiting (warning face, bold)
+idle      → ◇ ready (shadow face) — Claude finished, your turn
+attention → ● waiting (warning face, bold) — Claude is blocked
 stopped   → ◌ stopped (footer face)
+nil       → (no indicator — no session for this workspace)
 ```
+
+`idle` and `attention` both mean "you should interact," but attention is urgent (Claude can't continue without you) while idle is informational (Claude finished, ball is in your court).
+
+The `nil` case replaces the current fallback that shows "working" for unknown states. A grove-active workspace with no Claude session should show no status indicator.
+
+#### Callsite migration
+
+The return value of `claude-workspace-attention` changes from `working/idle/nil` to `active/idle/attention/stopped/nil`. Dashboard callsites that need updating:
+
+- `claude-dashboard--insert-status` — add `idle` case, rename `'idle` → `'attention` for waiting indicator
+- `claude-dashboard--sort-workspaces` — change `(memq ... '(idle error))` to `(memq ... '(idle attention))`
+- `claude-dashboard--insert-repo-section` — home attention check (already works, just returns new symbols)
+- All test assertions that check for `'working` or `'idle` (old semantics)
 
 ### Last Tool Display
 
 When sap reports `last_tool` and `last_tool_detail`, the dashboard can show what Claude is doing:
 
 ```
-⚡ editing src/app.ts
-⚡ running tests
-● waiting for permission
-◌ stopped (2m ago)
+⚡ editing src/app.ts           (active — tool context)
+⚡ running tests                (active — tool context)
+◇ ready                        (idle — no tool context, Claude is done)
+● waiting for permission       (attention — blocked)
+◌ stopped (2m ago)             (stopped — duration since stop)
 ```
 
-This replaces the generic "working" indicator with actionable context.
+Last-tool context is shown for `active` state only. `idle` means Claude finished — showing the last tool it used isn't useful.
 
 ### Resume Action
 
-New action on workspaces with stopped sessions:
+New action on workspaces whose monitor state is `stopped`. The dashboard renders "Resume" instead of "Open"/"Jump" when the monitor reports a stopped session.
+
+On resume, the dashboard calls `sap latest` to get the session ID (the monitor's internal state may not include it), then launches `claude --resume` in the appropriate vterm:
 
 ```elisp
-(defun claude-dashboard--resume-workspace (workspace)
-  "Resume the latest stopped session in WORKSPACE."
-  (claude-sap-latest workspace
-    (lambda (ok data _err)
-      (when (and ok (equal (plist-get data :state) "stopped"))
-        (let ((session-id (plist-get data :session_id)))
-          ;; Open/switch to workspace, then launch claude --resume
-          (claude-dashboard--open-workspace workspace)
-          (vterm-send-string
-            (format "claude --resume %s\n" session-id)))))))
+(defun claude-dashboard--resume-session (data)
+  "Resume the stopped session in workspace described by DATA.
+DATA is a dashboard entry plist with :repo-name, :branch, :path, :root."
+  (let* ((repo-name (plist-get data :repo-name))
+         (branch (plist-get data :branch))
+         (sap-ws (format "%s:%s" repo-name branch)))
+    (claude-sap-latest sap-ws
+      (lambda (ok latest _err)
+        (when (and ok (equal (plist-get latest :state) "stopped"))
+          (let ((session-id (plist-get latest :session_id))
+                (buf-name (format "*claude:%s:%s*" repo-name branch)))
+            ;; Switch to workspace (reuse existing open-home / jump-to-worktree)
+            (if (equal branch "home")
+                (claude-dashboard--open-home
+                  (list :name repo-name :path (plist-get data :path)))
+              (claude-dashboard--jump-to-worktree data))
+            ;; Send resume command to vterm
+            (when-let ((buf (get-buffer buf-name)))
+              (with-current-buffer buf
+                (vterm-send-string
+                  (format "claude --resume %s\n" session-id))))))))))
 ```
 
-The dashboard shows "Resume" instead of "Open" when a stopped session exists for a workspace.
+Resume is only available when the monitor has detected a stopped session (via the polling loop's absence-detection). If Emacs restarts and the monitor hasn't seen the session, no resume button appears — acceptable tradeoff vs polling `sap latest` for every workspace on every refresh.
 
 ### Session Duration
 
-With `started_at` available, the dashboard can show session duration:
+With `started_at` and `last_event_at` available, the dashboard can show contextual timing:
 
 ```
-⚡ working (12m)
-● waiting (12m, idle 30s)
-◌ stopped (ran for 45m)
+⚡ working (12m)               (session duration)
+◇ ready (30s)                  (time since Claude finished — how long it's been your turn)
+● waiting (45s)                (time since attention event — how long Claude has been blocked)
+◌ stopped (2m ago)             (time since session ended)
 ```
 
 ## claude-grove.el — No Changes
@@ -154,17 +292,25 @@ grove.el is unaffected. It manages workspace lifecycle (create, sync, close). sa
 ### claude-monitor tests (rewrite)
 
 - Stub `claude-sap-status` to return canned JSON
-- Test state transitions: active → attention → active → stopped
-- Test hook firing on state changes
+- Test state transitions: active → idle → active → attention → active → stopped
+- Test hook firing on state changes (including idle transitions)
 - Test graceful handling of sap not installed (fall back to nil states)
-- Test multiple workspaces with different states
+- Test multiple workspaces with different states simultaneously
+- **Test stopped detection by absence**: stub returns session on first poll, omits it on second poll → state transitions to `stopped`, hook fires
+- **Test stopped sessions don't re-fire**: once marked stopped, subsequent polls without the session don't fire the hook again
+- **Test stale sessions treated as stopped**: stub returns session with `"stale": true` → state is `stopped`, not the underlying state
+- **Test idle state**: stub returns session with `"state": "idle"` → `claude-workspace-attention` returns `'idle`
 
 ### claude-dashboard tests (additions)
 
-- Test new status indicator rendering (active/attention/stopped)
-- Test last-tool display in status line
+- Test new status indicator rendering (active/idle/attention/stopped/nil)
+- Test nil attention renders no indicator (not "working")
+- Test idle renders ◇ ready (not working, not waiting)
+- Test last-tool display in status line (active only, not idle)
 - Test resume action availability (stopped session → show Resume button)
-- Test duration display formatting
+- Test duration display formatting for each state
+- **Test home attention uses resolved branch**: stub `claude-dashboard--repo-branch` to return "main", verify dashboard queries `repo:main` not `repo:home`
+- **Test workspace sorting**: both `idle` and `attention` sort above `active`; `attention` sorts above `idle`
 
 ### No vterm dependency in tests
 
