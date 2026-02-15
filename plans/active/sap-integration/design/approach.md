@@ -7,7 +7,7 @@ Last updated: 2026-02-14
 ### What Gets Removed
 
 - `claude-attention-patterns` — regex list (replaced by exact hook events)
-- `claude-attention-idle-threshold` — timing heuristic (replaced by idle_prompt hook)
+- `claude-attention-idle-threshold` — timing heuristic (replaced by attention-idle hook)
 - `claude--last-content-hash`, `claude--last-output-time` — buffer-local hash tracking
 - `claude--check-buffer-attention` — the vterm scraping function
 - `vterm--filter-buffer-substring` dependency — no more buffer content reading
@@ -110,7 +110,7 @@ Old three-state model:
 New state model (from sap):
 - `active` — Claude is working (session-start, tool-use, user-prompt events)
 - `idle` — Claude finished its turn, awaiting user input (turn-complete event)
-- `attention` — Claude is blocked, needs user action (permission_prompt, idle_prompt events)
+- `attention` — Claude is blocked, needs user action (attention-permission, attention-idle events)
 - `stopped` — session ended
 - `nil` — no session for this workspace
 
@@ -183,6 +183,60 @@ This is one `git` call per repo per refresh cycle (~5 second interval). With a s
 ### Caching
 
 The resolved branch can be cached alongside the grove data in the dashboard's tier 1 pipeline. Invalidation: re-resolve on each full refresh (tier 1). Branch switches on the main repo are uncommon in worktree-based workflows.
+
+## Claude Code Hooks Configuration
+
+sap is fed by Claude Code hooks. Each hook event pipes its stdin JSON (which includes `session_id` and `cwd`) directly to `sap record`. sap ignores unknown fields, so the extra hook metadata (`hook_event_name`, `permission_mode`, etc.) passes through harmlessly. sap also picks up `transcript_path` when present.
+
+### Hook-to-sap event mapping
+
+| Claude Code Hook | sap Event | sap State After |
+|------------------|-----------|-----------------|
+| `SessionStart` | `session-start` | `active` |
+| `SessionEnd` | `session-end` | `stopped` |
+| `PreToolUse` | `tool-use` | `active` |
+| `Stop` | `turn-complete` | `idle` |
+| `PermissionRequest` | `attention-permission` | `attention` |
+| `UserPromptSubmit` | `user-prompt` | `active` |
+| `Notification` | `attention-idle` | `attention` |
+
+`PreToolUse` is used over `PostToolUse` so that sap shows what Claude is *currently doing*, not what it just finished. Both fire with `tool_name` and `tool_input` on stdin.
+
+`Notification` maps to `attention-idle` — when Claude sends a desktop notification, it means the session is idle and wants user attention.
+
+### Configuration
+
+Lives in `claude/settings.json` in this dotfiles repo (symlinked to `~/.claude/settings.json`). Hooks are no-ops if sap isn't installed — Claude Code logs the hook failure but continues normally.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "sap record --event session-start" }] }
+    ],
+    "SessionEnd": [
+      { "hooks": [{ "type": "command", "command": "sap record --event session-end" }] }
+    ],
+    "PreToolUse": [
+      { "hooks": [{ "type": "command", "command": "sap record --event tool-use" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "sap record --event turn-complete" }] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [{ "type": "command", "command": "sap record --event attention-permission" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "sap record --event user-prompt" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "sap record --event attention-idle" }] }
+    ]
+  }
+}
+```
+
+Each hook is synchronous (default). `sap record` writes to SQLite and exits in <50ms, so there's no perceptible delay. If sap fails (exit code 2), Claude Code logs the error and continues — hooks don't block the session.
 
 ## claude-dashboard.el Changes
 
@@ -318,14 +372,18 @@ The rewritten monitor has zero vterm dependency — it's pure async process call
 
 ## Migration
 
-### Backward compatibility
+### Atomic swap, not phased
 
-The old monitor can coexist during migration:
-1. Deploy sap + hooks first
-2. Rewrite monitor to poll sap
+The monitor rewrite and dashboard callsite migration must land as a single change. The old monitor returns `'working` / `'idle` (meaning attention) / `nil`. The new monitor returns `'active` / `'idle` / `'attention` / `'stopped` / `nil`. If the dashboard is updated to expect new symbols but the monitor still returns old ones (or vice versa), status indicators will silently break.
+
+Specifically, the home attention query (`(format "%s:home" name)`) must change to use the resolved branch at the same time the monitor switches to sap — otherwise the dashboard queries `repo:home` against sap's `repo:main` and gets nil.
+
+### Steps
+
+1. Install sap CLI and configure hooks in `claude/settings.json` (can be done before the Emacs changes — hooks are no-ops without sap, sap records events without Emacs consuming them)
+2. Rewrite `claude-monitor.el` + update all dashboard callsites + update all tests in a single commit
 3. If sap is not installed, monitor returns nil for all workspaces (dashboard shows no status, but doesn't crash)
-4. Remove old pattern-matching code once sap is confirmed working
 
 ### Hooks installation
 
-The Claude Code hooks configuration lives in `claude/settings.json` in this dotfiles repo. Adding hooks there means they're active for anyone using these dotfiles (i.e., just you). The hooks are no-ops if sap isn't installed (Claude Code reports hook command failure but continues normally).
+The Claude Code hooks configuration lives in `claude/settings.json` in this dotfiles repo (see "Claude Code Hooks Configuration" section above). Adding hooks there means they're active for anyone using these dotfiles (i.e., just you). The hooks are no-ops if sap isn't installed — Claude Code logs the hook failure but continues normally.

@@ -1,42 +1,20 @@
-;;; claude-monitor.el --- Attention monitoring -*- lexical-binding: t; -*-
+;;; claude-monitor.el --- Session awareness via SAP -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Monitors Claude vterm buffers for attention needs.
+;; Monitors Claude sessions via SAP (Session Awareness Protocol).
+;; Polls `sap status --json` for session state instead of scraping vterm.
 ;; No dependencies on other claude modules.
 ;; Dashboard is the sole UI for workspace status — no modeline.
 
 ;;; Code:
 
+(require 'json)
+
 ;;; Customization
 
 (defcustom claude-monitor-interval 2
-  "Seconds between attention checks."
+  "Seconds between SAP status polls."
   :type 'integer
-  :group 'claude)
-
-(defcustom claude-attention-idle-threshold 3
-  "Seconds of idle output before checking attention patterns."
-  :type 'integer
-  :group 'claude)
-
-(defcustom claude-attention-patterns
-  '(;; Permission prompts (Claude Code specific)
-    "Allow .* to \\(run\\|read\\|write\\|edit\\)"
-    "\\[y/n\\]"
-    "\\[Y/n\\]"
-    "\\[y/N\\]"
-    ;; Tool confirmations
-    "Do you want to proceed"
-    "Would you like"
-    "Proceed\\?"
-    "Continue\\?"
-    ;; Empty prompt (Claude waiting for input)
-    "^> *$"
-    "^❯ *$"
-    ;; MCP permission prompts
-    "needs your permission")
-  "Patterns indicating Claude needs attention."
-  :type '(repeat string)
   :group 'claude)
 
 ;;; Hooks
@@ -44,22 +22,16 @@
 (defvar claude-attention-change-hook nil
   "Hook run when any workspace's attention status changes.
 Called with (workspace-name new-status).
-NEW-STATUS is a symbol: `working', `idle', `error', or nil.")
+NEW-STATUS is a symbol: `active', `idle', `attention', `stopped', or nil.")
 
 ;;; Internal State
 
 (defvar claude-monitor-timer nil
-  "Timer for attention monitoring.")
+  "Timer for SAP polling.")
 
-;; Buffer-local state
-(defvar-local claude--last-output-time nil
-  "Timestamp of last detected output change.")
-
-(defvar-local claude--last-content-hash nil
-  "Hash of recent buffer content to detect changes.")
-
-(defvar-local claude--needs-attention nil
-  "Non-nil if this buffer needs user attention.")
+(defvar claude--workspace-states (make-hash-table :test 'equal)
+  "Hash table mapping workspace name to (STATE . SESSION-PLIST).
+Populated by polling loop, queried by public API.")
 
 ;;; Buffer Name Matching
 
@@ -79,98 +51,241 @@ Returns \"REPO:BRANCH\" or nil."
                                      (buffer-name buf))))
               (buffer-list)))
 
-;;; Content Analysis
+;;; SAP CLI Wrapper
 
-(defun claude--get-last-n-lines (buffer n)
-  "Get last N lines from vterm BUFFER, filtering fake newlines."
-  (when (buffer-live-p buffer)
-    (with-current-buffer buffer
-      (save-excursion
-        (goto-char (point-max))
-        (forward-line (- n))
-        (let ((text (buffer-substring (point) (point-max))))
-          (if (fboundp 'vterm--filter-buffer-substring)
-              (vterm--filter-buffer-substring text)
-            text))))))
+(defcustom claude-stopped-expiry 1800
+  "Seconds after which stopped sessions are cleared from state.
+Set to nil to disable expiry.  Default is 1800 (30 minutes)."
+  :type '(choice integer (const nil))
+  :group 'claude)
 
-(defun claude--content-hash (buffer)
-  "Calculate MD5 hash of last 15 lines of BUFFER."
-  (let ((content (claude--get-last-n-lines buffer 15)))
-    (when content
-      (md5 content))))
+(defcustom claude-sap-executable "sap"
+  "Path to the sap executable."
+  :type 'string
+  :group 'claude)
 
-(defun claude--matches-attention-pattern-p (text)
-  "Return non-nil if TEXT matches any attention pattern."
-  (when text
-    (seq-some (lambda (pattern)
-                (string-match-p pattern text))
-              claude-attention-patterns)))
+(defcustom claude-sap-timeout 5
+  "Seconds before a sap command is killed."
+  :type 'integer
+  :group 'claude)
 
-;;; Buffer Attention Checking
+(defvar claude-sap--pending (make-hash-table :test 'equal)
+  "Hash table of in-flight sap commands for dedup guard.")
 
-(defun claude--check-buffer-attention (buffer)
-  "Check if BUFFER needs attention and update its state."
-  (when (buffer-live-p buffer)
-    (with-current-buffer buffer
-      (let ((current-hash (claude--content-hash buffer))
-            (now (float-time)))
-        (cond
-         ;; Content changed — update timestamp, clear attention
-         ((not (equal current-hash claude--last-content-hash))
-          (setq claude--last-content-hash current-hash
-                claude--last-output-time now
-                claude--needs-attention nil))
-         ;; Content stable long enough — check patterns
-         ((and claude--last-output-time
-               (> (- now claude--last-output-time) claude-attention-idle-threshold))
-          (let ((content (claude--get-last-n-lines buffer 15))
-                (old-attention claude--needs-attention))
-            (setq claude--needs-attention
-                  (claude--matches-attention-pattern-p content))
-            ;; Fire hook if attention state changed
-            (when (not (eq old-attention claude--needs-attention))
-              (when-let ((ws-name (claude-monitor--workspace-for-buffer buffer)))
-                (run-hook-with-args 'claude-attention-change-hook
-                                    ws-name
-                                    (claude-workspace-attention ws-name)))))))))))
+(defun claude-sap--request-pending-p (key)
+  "Return t if a sap call with KEY is in-flight."
+  (when-let ((proc (gethash key claude-sap--pending)))
+    (process-live-p proc)))
 
-(defun claude--check-all-buffers ()
-  "Check all Claude vterm buffers for attention needs."
-  (dolist (buffer (claude-monitor--claude-buffers))
-    (claude--check-buffer-attention buffer)))
+(defun claude-sap--run (args callback &optional guard-key)
+  "Run sap with ARGS asynchronously, invoke CALLBACK with result.
+CALLBACK signature: (lambda (ok data error-msg) ...).
+GUARD-KEY if non-nil skips the call when a previous one with the
+same key is still in-flight.
+SAP returns raw JSON (no envelope), so parsed output is passed directly."
+  (cond
+   ;; In-flight guard
+   ((and guard-key (claude-sap--request-pending-p guard-key))
+    nil)
+   ;; Check executable
+   ((not (executable-find claude-sap-executable))
+    (funcall callback nil nil nil))
+   ;; Run the command
+   (t
+    (let* ((default-directory (if (file-directory-p default-directory)
+                                  default-directory
+                                (expand-file-name "~")))
+           (exe (executable-find claude-sap-executable))
+           (output-buffer (generate-new-buffer " *sap-output*"))
+           (command-args (append (list exe) args))
+           (proc (make-process
+                  :name (format "sap-%s" (car args))
+                  :buffer output-buffer
+                  :command command-args
+                  :connection-type 'pipe
+                  :sentinel
+                  (lambda (process event)
+                    (claude-sap--sentinel process event callback guard-key))))
+           (timer (run-at-time claude-sap-timeout nil
+                               (lambda ()
+                                 (claude-sap--handle-timeout proc callback guard-key)))))
+      ;; Store process and timer
+      (process-put proc 'sap-timer timer)
+      (process-put proc 'sap-callback callback)
+      (when guard-key
+        (puthash guard-key proc claude-sap--pending))))))
+
+(defun claude-sap--sentinel (process event callback guard-key)
+  "Handle PROCESS completion EVENT, invoke CALLBACK.
+GUARD-KEY is cleared from the pending table."
+  ;; Cancel timeout timer
+  (when-let ((timer (process-get process 'sap-timer)))
+    (cancel-timer timer))
+  ;; Clear in-flight guard
+  (when guard-key
+    (remhash guard-key claude-sap--pending))
+  ;; Parse output
+  (let ((output-buffer (process-buffer process)))
+    (unwind-protect
+        (if (not (string-match-p "finished" event))
+            (funcall callback nil nil
+                     (format "sap process %s" (string-trim event)))
+          ;; Success — parse raw JSON
+          (let* ((output (when (buffer-live-p output-buffer)
+                           (with-current-buffer output-buffer
+                             (buffer-string))))
+                 (parsed nil)
+                 (parse-error nil))
+            (condition-case err
+                (setq parsed (json-parse-string output
+                                                :object-type 'plist
+                                                :null-object nil
+                                                :false-object nil))
+              (error
+               (setq parse-error (error-message-string err))))
+            (if parse-error
+                (funcall callback nil nil
+                         (format "JSON parse error: %s" parse-error))
+              (funcall callback t parsed nil))))
+      ;; Clean up output buffer
+      (when (buffer-live-p output-buffer)
+        (kill-buffer output-buffer)))))
+
+(defun claude-sap--handle-timeout (proc callback guard-key)
+  "Kill PROC that timed out, invoke CALLBACK with error.
+GUARD-KEY is cleared from the pending table."
+  (when (process-live-p proc)
+    ;; Clear the sentinel so it doesn't also fire
+    (set-process-sentinel proc #'ignore)
+    ;; Clear in-flight guard
+    (when guard-key
+      (remhash guard-key claude-sap--pending))
+    ;; Kill process and buffer
+    (let ((buf (process-buffer proc)))
+      (delete-process proc)
+      (when (buffer-live-p buf)
+        (kill-buffer buf)))
+    ;; Invoke callback
+    (funcall callback nil nil "sap timed out")))
+
+;;; SAP Public Commands
+
+(defun claude-sap-status (callback)
+  "Query sap for current session states.
+CALLBACK: (lambda (ok data error-msg) ...).
+Skips call if a previous status query is still in-flight."
+  (claude-sap--run '("status" "--json") callback "sap-status"))
+
+(defun claude-sap-latest (workspace callback)
+  "Query sap for latest session in WORKSPACE.
+CALLBACK: (lambda (ok data error-msg) ...)."
+  (claude-sap--run (list "latest" "--workspace" workspace "--json") callback))
+
+;;; State Table
+
+(defun claude--get-workspace-state (workspace)
+  "Return state symbol for WORKSPACE, or nil."
+  (car (gethash workspace claude--workspace-states)))
+
+(defun claude--set-workspace-state (workspace session state)
+  "Set STATE and SESSION data for WORKSPACE."
+  (puthash workspace (cons state session) claude--workspace-states))
+
+(defun claude--set-workspace-stopped (workspace)
+  "Mark WORKSPACE as stopped, preserving session data."
+  (when-let ((entry (gethash workspace claude--workspace-states)))
+    (puthash workspace (cons 'stopped (cdr entry))
+             claude--workspace-states)))
+
+;;; Session Expiry
+
+(defun claude--expire-stopped-sessions ()
+  "Remove stopped sessions older than `claude-stopped-expiry' seconds."
+  (when claude-stopped-expiry
+    (let ((cutoff (- (float-time) claude-stopped-expiry))
+          (to-remove nil))
+      (maphash
+       (lambda (ws entry)
+         (when (eq (car entry) 'stopped)
+           (let* ((session (cdr entry))
+                  (last-event (plist-get session :last_event_at))
+                  (event-time (when last-event (/ last-event 1000.0))))
+             (when (and event-time (< event-time cutoff))
+               (push ws to-remove)))))
+       claude--workspace-states)
+      (dolist (ws to-remove)
+        (remhash ws claude--workspace-states)))))
+
+;;; Polling Loop
+
+(defun claude--poll-sap ()
+  "Poll sap for current session states and update internal state.
+Detects stopped sessions by absence from sap status response.
+Treats stale sessions as stopped."
+  (claude-sap-status
+   (lambda (ok data _err)
+     (when ok
+       (let ((sessions (append (plist-get data :sessions) nil))
+             (seen (make-hash-table :test 'equal)))
+         ;; Process sessions present in response
+         (dolist (session sessions)
+           (let* ((ws (plist-get session :workspace))
+                  (stale (eq (plist-get session :stale) t))
+                  (state (if stale 'stopped
+                           (intern (plist-get session :state))))
+                  (old-state (claude--get-workspace-state ws)))
+             (puthash ws t seen)
+             (claude--set-workspace-state ws session state)
+             (when (not (eq state old-state))
+               (run-hook-with-args 'claude-attention-change-hook
+                                   ws state))))
+         ;; Detect stopped: known workspaces absent from response
+         (maphash
+          (lambda (ws entry)
+            (unless (or (gethash ws seen)
+                        (eq (car entry) 'stopped))
+              (claude--set-workspace-stopped ws)
+              (run-hook-with-args 'claude-attention-change-hook
+                                  ws 'stopped)))
+          claude--workspace-states)
+         ;; Expire old stopped sessions
+         (claude--expire-stopped-sessions))))))
 
 ;;; Public Query Interface
 
-(defun claude-workspace-attention (workspace-name)
-  "Return attention status for WORKSPACE-NAME.
-Returns symbol: `working', `idle', `error', or nil.
-WORKSPACE-NAME is \"REPO:BRANCH\"."
-  (let ((buffer-name (format "*claude:%s*" workspace-name)))
-    (if-let ((buffer (get-buffer buffer-name)))
-        (if (buffer-local-value 'claude--needs-attention buffer)
-            'idle
-          'working)
-      nil)))
+(defun claude-workspace-attention (workspace)
+  "Return attention state for WORKSPACE.
+WORKSPACE is in sap format: \"repo:branch\".
+Returns `active', `idle', `attention', `stopped', or nil."
+  (claude--get-workspace-state workspace))
+
+(defun claude-workspace-session (workspace)
+  "Return full session plist for WORKSPACE, or nil.
+WORKSPACE is in sap format: \"repo:branch\".
+Session fields: :session_id :workspace :state :started_at
+:last_event_at :last_tool :last_tool_detail :transcript_path."
+  (cdr (gethash workspace claude--workspace-states)))
 
 ;;; Monitor Control
 
 ;;;###autoload
 (defun claude-monitor-start ()
-  "Start attention monitoring."
+  "Start SAP polling."
   (interactive)
   (unless claude-monitor-timer
     (setq claude-monitor-timer
           (run-with-timer claude-monitor-interval
                           claude-monitor-interval
-                          #'claude--check-all-buffers))))
+                          #'claude--poll-sap))))
 
 ;;;###autoload
 (defun claude-monitor-stop ()
-  "Stop attention monitoring."
+  "Stop SAP polling and clear state."
   (interactive)
   (when claude-monitor-timer
     (cancel-timer claude-monitor-timer)
-    (setq claude-monitor-timer nil)))
+    (setq claude-monitor-timer nil))
+  (clrhash claude--workspace-states))
 
 ;;;###autoload
 (defun claude-monitor-toggle ()

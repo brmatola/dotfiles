@@ -36,8 +36,11 @@ run_test_file() {
     echo ""
 }
 
-# Grove wrapper + monitor tests
+# Grove wrapper tests
 run_test_file "claude-grove-test" "-l claude-grove.el -l claude-monitor.el" "test/claude-grove-test.el"
+
+# Monitor (SAP) tests
+run_test_file "claude-monitor-test" "-l claude-monitor.el" "test/claude-monitor-test.el"
 
 # Dashboard rendering tests
 run_test_file "claude-dashboard-test" "-l claude-grove.el -l claude-monitor.el -l claude-dashboard.el" "test/claude-dashboard-test.el"

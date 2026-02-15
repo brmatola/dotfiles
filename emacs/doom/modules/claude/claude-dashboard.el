@@ -106,6 +106,14 @@
   '((t :inherit shadow))
   "Face for tree drawing characters.")
 
+(defface claude-dashboard-idle-face
+  '((t :inherit shadow))
+  "Face for idle/ready status.")
+
+(defface claude-dashboard-stopped-face
+  '((t :inherit shadow))
+  "Face for stopped status.")
+
 (defface claude-dashboard-footer-face
   '((t :inherit shadow))
   "Face for the footer hint bar.")
@@ -370,6 +378,46 @@ Batches rapid tier 2 arrivals into a single repaint."
                           'face 'claude-dashboard-footer-face)))
     (insert "\n")))
 
+;;; Helpers
+
+(defun claude-dashboard--repo-branch (repo-path)
+  "Return current branch for REPO-PATH, or nil."
+  (when (and repo-path (file-directory-p repo-path))
+    (let ((default-directory (file-name-as-directory repo-path)))
+      (condition-case nil
+          (string-trim
+           (shell-command-to-string "git rev-parse --abbrev-ref HEAD"))
+        (error nil)))))
+
+(defun claude-dashboard--format-duration (ms-timestamp)
+  "Format elapsed time since MS-TIMESTAMP as human-readable string.
+MS-TIMESTAMP is epoch milliseconds from SAP."
+  (when ms-timestamp
+    (let* ((elapsed-secs (- (float-time) (/ ms-timestamp 1000.0)))
+           (elapsed (max 0 (round elapsed-secs))))
+      (cond
+       ((< elapsed 60) (format "%ds" elapsed))
+       ((< elapsed 3600) (format "%dm" (/ elapsed 60)))
+       (t (format "%dh" (/ elapsed 3600)))))))
+
+(defun claude-dashboard--tool-context (session)
+  "Return tool context string from SESSION plist, or nil."
+  (when-let ((tool (plist-get session :last_tool)))
+    (let ((detail (plist-get session :last_tool_detail)))
+      (cond
+       ((member tool '("Edit" "Write"))
+        (if detail (format "editing %s" detail) "editing"))
+       ((equal tool "Bash")
+        (if detail
+            (let ((truncated (if (> (length detail) 30)
+                                 (concat (substring detail 0 27) "...")
+                               detail)))
+              (format "running %s" truncated))
+          "running command"))
+       ((member tool '("Read" "Grep" "Glob"))
+        "searching")
+       (t (downcase tool))))))
+
 ;;; Section Renderers
 
 (defun claude-dashboard--insert-title ()
@@ -392,9 +440,11 @@ Batches rapid tier 2 arrivals into a single repaint."
       (setq ws-list (claude-dashboard--sort-workspaces ws-list name)))
     ;; Repo header line
     (insert "\n")
-    (let ((line-start (point))
-          (home-attention (claude-workspace-attention
-                           (format "%s:home" name))))
+    (let* ((line-start (point))
+           (branch (claude-dashboard--repo-branch path))
+           (home-ws (when branch (format "%s:%s" name branch)))
+           (home-attention (when home-ws (claude-workspace-attention home-ws)))
+           (home-session (when home-ws (claude-workspace-session home-ws))))
       (insert "   "
               (propertize name
                           'face (if has-workspaces
@@ -403,22 +453,32 @@ Batches rapid tier 2 arrivals into a single repaint."
       ;; Home session status (when a claude session is active)
       (when home-attention
         (insert "  ")
-        (claude-dashboard--insert-status "active" home-attention))
-      ;; Right-aligned Open + New Worktree buttons
-      (claude-dashboard--insert-right-aligned
-       (concat
-        (propertize " Open "
-                    'face 'claude-dashboard-button-face
-                    'mouse-face 'highlight
-                    'claude-dashboard-action 'open-home
-                    'claude-dashboard-entry-data (list :name name :path path))
-        " "
-        (propertize " + New Worktree "
-                    'face 'claude-dashboard-button-face
-                    'mouse-face 'highlight
-                    'claude-dashboard-action 'create-worktree
-                    'claude-dashboard-entry-data (list :name name :path path)))
-       line-start)
+        (claude-dashboard--insert-status "active" home-attention home-session))
+      ;; Right-aligned buttons: Resume (if stopped) or Open, + New Worktree
+      (let ((primary-button
+             (if (eq home-attention 'stopped)
+                 (propertize " Resume "
+                             'face 'claude-dashboard-button-face
+                             'mouse-face 'highlight
+                             'claude-dashboard-action 'resume-home
+                             'claude-dashboard-entry-data
+                             (list :name name :path path :repo-name name
+                                   :branch (or branch "main")))
+               (propertize " Open "
+                           'face 'claude-dashboard-button-face
+                           'mouse-face 'highlight
+                           'claude-dashboard-action 'open-home
+                           'claude-dashboard-entry-data (list :name name :path path)))))
+        (claude-dashboard--insert-right-aligned
+         (concat
+          primary-button
+          " "
+          (propertize " + New Worktree "
+                      'face 'claude-dashboard-button-face
+                      'mouse-face 'highlight
+                      'claude-dashboard-action 'create-worktree
+                      'claude-dashboard-entry-data (list :name name :path path)))
+         line-start))
       (insert "\n")
       ;; Apply text properties to entire line
       (put-text-property line-start (point) 'claude-dashboard-entry-type 'repo)
@@ -459,6 +519,7 @@ IS-LAST indicates if this is the last entry (affects tree drawing)."
          (total-commits (plist-get ws :total-commits))
          (ws-name (format "%s:%s" repo-name branch))
          (attention (claude-workspace-attention ws-name))
+         (session (claude-workspace-session ws-name))
          (tree-char (if is-last "└" "├"))
          (line-start (point)))
     ;; Tree line + branch name
@@ -475,21 +536,28 @@ IS-LAST indicates if this is the last entry (affects tree drawing)."
                           'face 'claude-dashboard-commits-face)))
     ;; Status indicator
     (insert "  ")
-    (claude-dashboard--insert-status status attention)
+    (claude-dashboard--insert-status status attention session)
     ;; Right-aligned action buttons (only for active workspaces)
     (when (equal status "active")
-      (claude-dashboard--insert-right-aligned
-       (concat
-        (propertize " Jump "
-                    'face 'claude-dashboard-button-face
-                    'mouse-face 'highlight
-                    'claude-dashboard-action 'jump-to-worktree)
-        " "
-        (propertize " Close "
-                    'face 'claude-dashboard-button-face
-                    'mouse-face 'highlight
-                    'claude-dashboard-action 'close-worktree))
-       line-start))
+      (let ((primary-action
+             (if (eq attention 'stopped)
+                 (propertize " Resume "
+                             'face 'claude-dashboard-button-face
+                             'mouse-face 'highlight
+                             'claude-dashboard-action 'resume-session)
+               (propertize " Jump "
+                           'face 'claude-dashboard-button-face
+                           'mouse-face 'highlight
+                           'claude-dashboard-action 'jump-to-worktree))))
+        (claude-dashboard--insert-right-aligned
+         (concat
+          primary-action
+          " "
+          (propertize " Close "
+                      'face 'claude-dashboard-button-face
+                      'mouse-face 'highlight
+                      'claude-dashboard-action 'close-worktree))
+         line-start)))
     (insert "\n")
     ;; Apply text properties
     (put-text-property line-start (point) 'claude-dashboard-entry-type 'worktree)
@@ -527,8 +595,8 @@ IS-LAST-WS indicates if this is under the last worktree entry."
     (insert "\n")
     (put-text-property line-start (point) 'claude-dashboard-entry-type 'subrepo)))
 
-(defun claude-dashboard--insert-status (grove-status attention)
-  "Insert status indicator for GROVE-STATUS and ATTENTION."
+(defun claude-dashboard--insert-status (grove-status attention &optional session)
+  "Insert status indicator for GROVE-STATUS, ATTENTION, and SESSION."
   (cond
    ;; Lifecycle states take precedence
    ((equal grove-status "creating")
@@ -537,17 +605,41 @@ IS-LAST-WS indicates if this is under the last worktree entry."
     (insert (propertize "◌ closing…" 'face 'claude-dashboard-lifecycle-face)))
    ((equal grove-status "failed")
     (insert (propertize "✖ failed" 'face 'claude-dashboard-failed-face)))
-   ;; Active — use attention
+   ;; Active — use attention from SAP
    ((equal grove-status "active")
     (pcase attention
+      ('active
+       (let ((tool-ctx (claude-dashboard--tool-context session))
+             (duration (claude-dashboard--format-duration
+                        (plist-get session :started_at))))
+         (insert (propertize
+                  (concat "⚡ "
+                          (or tool-ctx "working")
+                          (when duration (format " (%s)" duration)))
+                  'face 'claude-dashboard-working-face))))
       ('idle
-       (insert (propertize "● waiting" 'face 'claude-dashboard-waiting-face)))
-      ('error
-       (insert (propertize "✖ error" 'face 'claude-dashboard-error-face)))
-      ('working
-       (insert (propertize "⚡working" 'face 'claude-dashboard-working-face)))
-      (_
-       (insert (propertize "⚡working" 'face 'claude-dashboard-working-face)))))
+       (let ((duration (claude-dashboard--format-duration
+                        (plist-get session :last_event_at))))
+         (insert (propertize
+                  (concat "◇ ready"
+                          (when duration (format " (%s)" duration)))
+                  'face 'claude-dashboard-idle-face))))
+      ('attention
+       (let ((duration (claude-dashboard--format-duration
+                        (plist-get session :last_event_at))))
+         (insert (propertize
+                  (concat "● waiting"
+                          (when duration (format " (%s)" duration)))
+                  'face 'claude-dashboard-waiting-face))))
+      ('stopped
+       (let ((duration (claude-dashboard--format-duration
+                        (plist-get session :last_event_at))))
+         (insert (propertize
+                  (concat "◌ stopped"
+                          (when duration (format " (%s)" duration)))
+                  'face 'claude-dashboard-stopped-face))))
+      ;; nil — no SAP session, show nothing
+      (_ nil)))
    ;; Unknown
    (t
     (insert (propertize (or grove-status "unknown")
@@ -571,7 +663,7 @@ IS-LAST-WS indicates if this is under the last worktree entry."
                         'face 'claude-dashboard-footer-face)
             "\n")))
 
-;;; Helpers
+;;; Layout Helpers
 
 (defun claude-dashboard--insert-right-aligned (text ref-start)
   "Insert TEXT right-aligned relative to column width.
@@ -647,11 +739,15 @@ REPO-NAME is the parent repo name, used for attention lookup."
                  (b-ws (format "%s:%s" repo-name (plist-get b :branch)))
                  (a-attention (claude-workspace-attention a-ws))
                  (b-attention (claude-workspace-attention b-ws))
-                 (a-needs (memq a-attention '(idle error)))
-                 (b-needs (memq b-attention '(idle error))))
+                 (a-needs (memq a-attention '(attention idle)))
+                 (b-needs (memq b-attention '(attention idle))))
             (cond
              ((and a-needs (not b-needs)) t)
              ((and (not a-needs) b-needs) nil)
+             ;; Within needs-action group: attention above idle
+             ((and a-needs b-needs
+                   (not (eq a-attention b-attention)))
+              (eq a-attention 'attention))
              (t (string< (plist-get a :branch) (plist-get b :branch))))))))
 
 ;;; Position Preservation
@@ -922,7 +1018,9 @@ grove repo, to avoid touching unrelated workspaces."
     ('open-home (claude-dashboard--open-home data))
     ('jump-to-worktree (claude-dashboard--jump-to-worktree data))
     ('create-worktree (claude-dashboard--create-worktree data))
-    ('close-worktree (claude-dashboard--close-worktree data))))
+    ('close-worktree (claude-dashboard--close-worktree data))
+    ('resume-session (claude-dashboard--resume-session data))
+    ('resume-home (claude-dashboard--resume-home data))))
 
 (defun claude-dashboard-create ()
   "Create a new worktree in the repo at point."
@@ -1163,6 +1261,44 @@ Returns list of plists (:id ... :title ...) or nil."
            (when-let ((buf (get-buffer "*claude:dashboard*")))
              (with-current-buffer buf
                (claude-dashboard-refresh)))))))))
+
+(defun claude-dashboard--resume-session (data)
+  "Resume the stopped session in workspace described by DATA."
+  (let* ((repo-name (plist-get data :repo-name))
+         (branch (plist-get data :branch))
+         (sap-ws (format "%s:%s" repo-name branch)))
+    (claude-sap-latest sap-ws
+      (lambda (ok latest _err)
+        (when ok
+          (let ((session-id (plist-get latest :session_id))
+                (buf-name (format "*claude:%s:%s*" repo-name branch)))
+            ;; Switch to workspace
+            (claude-dashboard--jump-to-worktree data)
+            ;; Send resume command to vterm
+            (when (and session-id (get-buffer buf-name))
+              (with-current-buffer (get-buffer buf-name)
+                (when (fboundp 'vterm-send-string)
+                  (vterm-send-string
+                   (format "claude --resume %s\n" session-id)))))))))))
+
+(defun claude-dashboard--resume-home (data)
+  "Resume the stopped home session for repo described by DATA."
+  (let* ((name (plist-get data :name))
+         (branch (plist-get data :branch))
+         (sap-ws (format "%s:%s" name branch)))
+    (claude-sap-latest sap-ws
+      (lambda (ok latest _err)
+        (when ok
+          (let ((session-id (plist-get latest :session_id))
+                (buf-name (format "*claude:%s:home*" name)))
+            ;; Switch to home workspace
+            (claude-dashboard--open-home data)
+            ;; Send resume command to vterm
+            (when (and session-id (get-buffer buf-name))
+              (with-current-buffer (get-buffer buf-name)
+                (when (fboundp 'vterm-send-string)
+                  (vterm-send-string
+                   (format "claude --resume %s\n" session-id)))))))))))
 
 (defun claude-dashboard--add-repo ()
   "Prompt for a directory and add it to the repo registry."

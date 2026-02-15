@@ -73,42 +73,49 @@
   "Test that repo header shows attention status for home session."
   (with-temp-buffer
     (claude-dashboard-mode)
-    (setq claude-dashboard--grove-cache
-          (claude-dashboard-test--make-grove-data
-           (claude-dashboard-test--make-repo "myrepo" "/tmp/myrepo")))
-    ;; No home session — no status indicator
-    (claude-dashboard--paint)
-    (should-not (string-match-p "working\\|waiting" (buffer-string)))
-    ;; Simulate active home session (working)
-    (let ((home-buf (get-buffer-create "*claude:myrepo:home*")))
-      (unwind-protect
-          (progn
-            (with-current-buffer home-buf
-              (setq claude--needs-attention nil))
-            (claude-dashboard--paint)
-            (should (string-match-p "working" (buffer-string)))
-            ;; Simulate needs attention (waiting)
-            (with-current-buffer home-buf
-              (setq claude--needs-attention t))
-            (claude-dashboard--paint)
-            (should (string-match-p "waiting" (buffer-string))))
-        (kill-buffer home-buf)))))
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo "myrepo" "/tmp/myrepo")))
+      ;; Stub repo-branch to return "main"
+      (cl-letf (((symbol-function 'claude-dashboard--repo-branch)
+                 (lambda (_path) "main")))
+        ;; No SAP session — no status indicator
+        (claude-dashboard--paint)
+        (should-not (string-match-p "working\\|waiting\\|ready" (buffer-string)))
+        ;; Active session → working
+        (claude--set-workspace-state "myrepo:main"
+                                     (list :workspace "myrepo:main" :state "active")
+                                     'active)
+        (claude-dashboard--paint)
+        (should (string-match-p "working" (buffer-string)))
+        ;; Attention session → waiting
+        (claude--set-workspace-state "myrepo:main"
+                                     (list :workspace "myrepo:main" :state "attention")
+                                     'attention)
+        (claude-dashboard--paint)
+        (should (string-match-p "waiting" (buffer-string)))))))
 
 (ert-deftest claude-dashboard-test-paint-repo-with-workspaces ()
   "Test rendering a repo with active workspaces."
   (with-temp-buffer
     (claude-dashboard-mode)
-    (setq claude-dashboard--grove-cache
-          (claude-dashboard-test--make-grove-data
-           (claude-dashboard-test--make-repo
-            "dotfiles" "/tmp/dotfiles"
-            (claude-dashboard-test--make-workspace "dotfiles-fix-zsh" "fix-zsh" "active")
-            (claude-dashboard-test--make-workspace "dotfiles-add-pkg" "add-pkg" "active"))))
-    (claude-dashboard--paint)
-    (should (string-match-p "dotfiles" (buffer-string)))
-    (should (string-match-p "fix-zsh" (buffer-string)))
-    (should (string-match-p "add-pkg" (buffer-string)))
-    (should (string-match-p "working" (buffer-string)))))
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "dotfiles" "/tmp/dotfiles"
+              (claude-dashboard-test--make-workspace "dotfiles-fix-zsh" "fix-zsh" "active")
+              (claude-dashboard-test--make-workspace "dotfiles-add-pkg" "add-pkg" "active"))))
+      ;; Give one workspace an active SAP session
+      (claude--set-workspace-state "dotfiles:fix-zsh"
+                                   (list :workspace "dotfiles:fix-zsh" :state "active")
+                                   'active)
+      (claude-dashboard--paint)
+      (should (string-match-p "dotfiles" (buffer-string)))
+      (should (string-match-p "fix-zsh" (buffer-string)))
+      (should (string-match-p "add-pkg" (buffer-string)))
+      (should (string-match-p "working" (buffer-string))))))
 
 (ert-deftest claude-dashboard-test-paint-lifecycle-status ()
   "Test rendering workspaces in lifecycle states."
@@ -318,19 +325,17 @@
 (ert-deftest claude-dashboard-test-sort-attention-first ()
   "Test that workspaces needing attention sort first."
   (let ((ws-a (list :branch "alpha" :status "active"))
-        (ws-b (list :branch "beta" :status "active")))
-    ;; Create a buffer where beta needs attention
-    (let ((buf-b (generate-new-buffer "*claude:myrepo:beta*")))
-      (unwind-protect
-          (progn
-            (with-current-buffer buf-b
-              (setq claude--needs-attention t))
-            (let ((sorted (claude-dashboard--sort-workspaces
-                           (list ws-a ws-b) "myrepo")))
-              ;; beta (needs attention) should come first
-              (should (equal (plist-get (car sorted) :branch) "beta"))
-              (should (equal (plist-get (cadr sorted) :branch) "alpha"))))
-        (kill-buffer buf-b)))))
+        (ws-b (list :branch "beta" :status "active"))
+        (claude--workspace-states (make-hash-table :test 'equal)))
+    ;; Give beta an attention state
+    (claude--set-workspace-state "myrepo:beta"
+                                 (list :workspace "myrepo:beta" :state "attention")
+                                 'attention)
+    (let ((sorted (claude-dashboard--sort-workspaces
+                   (list ws-a ws-b) "myrepo")))
+      ;; beta (attention) should come first
+      (should (equal (plist-get (car sorted) :branch) "beta"))
+      (should (equal (plist-get (cadr sorted) :branch) "alpha")))))
 
 (ert-deftest claude-dashboard-test-sort-alphabetical-tiebreak ()
   "Test that workspaces with same attention sort alphabetically."
@@ -392,18 +397,23 @@
   "Test that status indicators include icons."
   (with-temp-buffer
     (claude-dashboard-mode)
-    (setq claude-dashboard--grove-cache
-          (claude-dashboard-test--make-grove-data
-           (claude-dashboard-test--make-repo
-            "myrepo" "/tmp/myrepo"
-            (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active")
-            (claude-dashboard-test--make-workspace "myrepo-new" "new" "creating")
-            (claude-dashboard-test--make-workspace "myrepo-bad" "bad" "failed"))))
-    (claude-dashboard--paint)
-    (let ((content (buffer-string)))
-      (should (string-match-p "⚡" content))
-      (should (string-match-p "◌" content))
-      (should (string-match-p "✖" content)))))
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active")
+              (claude-dashboard-test--make-workspace "myrepo-new" "new" "creating")
+              (claude-dashboard-test--make-workspace "myrepo-bad" "bad" "failed"))))
+      ;; Give feat an active SAP session
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat" :state "active")
+                                   'active)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        (should (string-match-p "⚡ " content))
+        (should (string-match-p "◌" content))
+        (should (string-match-p "✖" content))))))
 
 ;;; Trellis Ready Plans Tests
 
@@ -613,6 +623,230 @@
       (let ((pos-before (point)))
         (claude-dashboard-prev)
         (should (< (point) pos-before))))))
+
+;;; SAP Status Rendering Tests
+
+(ert-deftest claude-dashboard-test-nil-attention-no-indicator ()
+  "Test that nil attention shows no status text."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      ;; No SAP session for this workspace
+      (claude-dashboard--paint)
+      (should-not (string-match-p "working\\|ready\\|waiting\\|stopped"
+                                  (buffer-string))))))
+
+(ert-deftest claude-dashboard-test-idle-renders-ready ()
+  "Test that idle state renders ◇ ready."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat" :state "idle")
+                                   'idle)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        (should (string-match-p "◇" content))
+        (should (string-match-p "ready" content))))))
+
+(ert-deftest claude-dashboard-test-attention-renders-waiting ()
+  "Test that attention state renders ● waiting."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat" :state "attention")
+                                   'attention)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        (should (string-match-p "●" content))
+        (should (string-match-p "waiting" content))))))
+
+(ert-deftest claude-dashboard-test-stopped-renders-stopped ()
+  "Test that stopped state renders ◌ stopped."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat" :state "stopped")
+                                   'stopped)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        (should (string-match-p "◌" content))
+        (should (string-match-p "stopped" content))))))
+
+(ert-deftest claude-dashboard-test-home-attention-uses-branch ()
+  "Test that home attention uses resolved branch, not 'home'."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal))
+          (queried-ws nil))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo "myrepo" "/tmp/myrepo")))
+      ;; Stub repo-branch to return "main"
+      (cl-letf (((symbol-function 'claude-dashboard--repo-branch)
+                 (lambda (_path) "main"))
+                ((symbol-function 'claude-workspace-attention)
+                 (lambda (ws)
+                   (push ws queried-ws)
+                   nil)))
+        (claude-dashboard--paint)
+        ;; Should have queried "myrepo:main", not "myrepo:home"
+        (should (member "myrepo:main" queried-ws))
+        (should-not (member "myrepo:home" queried-ws))))))
+
+(ert-deftest claude-dashboard-test-sort-priority ()
+  "Test sort priority: attention > idle > active."
+  (let ((ws-active (list :branch "alpha" :status "active"))
+        (ws-idle (list :branch "beta" :status "active"))
+        (ws-attention (list :branch "gamma" :status "active"))
+        (claude--workspace-states (make-hash-table :test 'equal)))
+    (claude--set-workspace-state "myrepo:alpha"
+                                 (list :workspace "myrepo:alpha") 'active)
+    (claude--set-workspace-state "myrepo:beta"
+                                 (list :workspace "myrepo:beta") 'idle)
+    (claude--set-workspace-state "myrepo:gamma"
+                                 (list :workspace "myrepo:gamma") 'attention)
+    (let ((sorted (claude-dashboard--sort-workspaces
+                   (list ws-active ws-idle ws-attention) "myrepo")))
+      ;; attention first, then idle, then active
+      (should (equal (plist-get (nth 0 sorted) :branch) "gamma"))
+      (should (equal (plist-get (nth 1 sorted) :branch) "beta"))
+      (should (equal (plist-get (nth 2 sorted) :branch) "alpha")))))
+
+(ert-deftest claude-dashboard-test-resume-button-on-stopped ()
+  "Test that stopped workspace shows Resume button."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat" :state "stopped")
+                                   'stopped)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        (should (string-match-p "Resume" content))
+        (should-not (string-match-p " Jump " content))))))
+
+(ert-deftest claude-dashboard-test-home-resume-on-stopped ()
+  "Test that repo header shows Resume when home session is stopped."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo "myrepo" "/tmp/myrepo")))
+      (cl-letf (((symbol-function 'claude-dashboard--repo-branch)
+                 (lambda (_path) "main")))
+        ;; Stopped home session → Resume button
+        (claude--set-workspace-state "myrepo:main"
+                                     (list :workspace "myrepo:main" :state "stopped")
+                                     'stopped)
+        (claude-dashboard--paint)
+        (let ((content (buffer-string)))
+          (should (string-match-p "Resume" content))
+          (should-not (string-match-p " Open " content)))))))
+
+(ert-deftest claude-dashboard-test-home-open-when-active ()
+  "Test that repo header shows Open when home session is active."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo "myrepo" "/tmp/myrepo")))
+      (cl-letf (((symbol-function 'claude-dashboard--repo-branch)
+                 (lambda (_path) "main")))
+        ;; Active home session → Open button (not Resume)
+        (claude--set-workspace-state "myrepo:main"
+                                     (list :workspace "myrepo:main" :state "active")
+                                     'active)
+        (claude-dashboard--paint)
+        (let ((content (buffer-string)))
+          (should (string-match-p " Open " content))
+          (should-not (string-match-p "Resume" content)))))))
+
+(ert-deftest claude-dashboard-test-jump-button-on-active ()
+  "Test that active workspace shows Jump button, not Resume."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat" :state "active")
+                                   'active)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        (should (string-match-p "Jump" content))
+        (should-not (string-match-p "Resume" content))))))
+
+(ert-deftest claude-dashboard-test-last-tool-display ()
+  "Test that active session with last_tool shows tool context."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (let ((claude--workspace-states (make-hash-table :test 'equal)))
+      (setq claude-dashboard--grove-cache
+            (claude-dashboard-test--make-grove-data
+             (claude-dashboard-test--make-repo
+              "myrepo" "/tmp/myrepo"
+              (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+      (claude--set-workspace-state "myrepo:feat"
+                                   (list :workspace "myrepo:feat"
+                                         :state "active"
+                                         :last_tool "Edit"
+                                         :last_tool_detail "config.el"
+                                         :started_at (* (float-time) 1000))
+                                   'active)
+      (claude-dashboard--paint)
+      (let ((content (buffer-string)))
+        ;; Verify space between icon and tool context
+        (should (string-match-p "⚡ editing config\\.el" content))))))
+
+(ert-deftest claude-dashboard-test-duration-display ()
+  "Test duration formatting helper."
+  ;; Recent timestamp → seconds
+  (let ((recent (* (- (float-time) 30) 1000)))
+    (should (string-match-p "^[0-9]+s$"
+                            (claude-dashboard--format-duration recent))))
+  ;; Older timestamp → minutes
+  (let ((older (* (- (float-time) 300) 1000)))
+    (should (string-match-p "^[0-9]+m$"
+                            (claude-dashboard--format-duration older))))
+  ;; Much older → hours
+  (let ((old (* (- (float-time) 7200) 1000)))
+    (should (string-match-p "^[0-9]+h$"
+                            (claude-dashboard--format-duration old))))
+  ;; nil → nil
+  (should (null (claude-dashboard--format-duration nil))))
 
 (provide 'claude-dashboard-test)
 ;;; claude-dashboard-test.el ends here

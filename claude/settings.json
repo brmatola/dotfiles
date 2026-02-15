@@ -49,7 +49,31 @@
       "Bash(brew list*)",
       "Bash(brew info*)",
       "Bash(grove *)",
-      "Bash(trellis *)"
+      "Bash(trellis *)",
+      "Bash(sap *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "sap record --event session-start" }] }
+    ],
+    "SessionEnd": [
+      { "hooks": [{ "type": "command", "command": "sap record --event session-end" }] }
+    ],
+    "PreToolUse": [
+      { "hooks": [{ "type": "command", "command": "sap record --event tool-use" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "sap record --event turn-complete" }] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [{ "type": "command", "command": "sap record --event attention-permission" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "sap record --event user-prompt" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "sap record --event attention-idle" }] }
     ]
   },
   "preferences": {
