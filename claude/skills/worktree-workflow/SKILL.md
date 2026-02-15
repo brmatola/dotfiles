@@ -143,6 +143,13 @@ Use Write tool to update `.workflow-state.json` after each phase.
      trellis show {plan-name} &>/dev/null && trellis update {plan-name} in_progress
    fi
    ```
+3.5. **Contract validation:** Check if the plan has `outputs.md`:
+   ```bash
+   if [[ ! -s "plans/active/{plan-name}/outputs.md" ]] || ! grep -q '^- ' "plans/active/{plan-name}/outputs.md" 2>/dev/null; then
+     echo "Warning: Plan has no outputs defined. Define outputs.md before implementation."
+   fi
+   ```
+   If `outputs.md` is empty or missing, warn the user but don't block — they may choose to define outputs before proceeding.
 4. Initialize state file:
    ```json
    {
@@ -177,7 +184,12 @@ Use Write tool to update `.workflow-state.json` after each phase.
 
 1. Update state to `"phase": "audit"`
 2. **INVOKE:** gremlins:implementation-review
-3. Add history entry with verdict
+3. **Output verification:** If the plan has `outputs.md`, verify each declared output against the implementation. This is the gate — downstream plans stay blocked until outputs are confirmed.
+   - Read `plans/active/{plan-name}/outputs.md`
+   - For each output item, check if it exists in the codebase (files created, exports present, commands registered, etc.)
+   - Report: "N/M outputs verified"
+   - If any output fails verification, treat it as an audit failure (NEEDS FIXES)
+4. Add history entry with verdict
 
 **If MERGE READY:**
 

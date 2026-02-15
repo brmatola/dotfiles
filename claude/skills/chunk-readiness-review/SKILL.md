@@ -43,8 +43,11 @@ Each subagent receives a prompt built from `./chunk-critique-prompt.md`. Interpo
 - `{{internalEdges}}` — the chunk's internal dependency edges as `from -> to` lines
 - `{{crossChunkEdges}}` — cross-chunk edges touching this chunk
 - `{{totalLines}}` — total line count for the chunk
+- `{{contractContext}}` — upstream contract data (see below)
 
-The subagent reads plan files and runs **4 adversarial passes** — cohesion, assumptions, edge cases, and complexity traps. Each subagent returns **structured markdown** findings (see chunk-critique-prompt.md for format).
+**Gathering contract context:** For each plan in the chunk, read `inputs.md` and `outputs.md` from the plan folder (`plans/active/{plan-id}/`). For plans with `depends_on` entries pointing to plans in OTHER chunks, read the upstream plan's `outputs.md` and include it as `{{contractContext}}` so the subagent can verify input/output alignment across chunk boundaries.
+
+The subagent reads plan files and runs **5 adversarial passes** — cohesion, assumptions, edge cases, complexity traps, and contract coherence. Each subagent returns **structured markdown** findings (see chunk-critique-prompt.md for format).
 
 **Error handling:** If a subagent fails, note it as a finding in the report. Don't block other chunks.
 
@@ -58,6 +61,9 @@ The synthesis uses the prompt from `./synthesis-prompt.md` and checks:
 - **Boundary cohesion:** Do connected chunks agree on what crosses boundaries?
 - **Workset justification:** Should any chunk be regrouped?
 - **Missing chunks:** Is there a chunk-shaped gap nobody covers?
+- **Contract alignment:** Do downstream inputs match upstream outputs across chunk boundaries?
+
+**Building `{{contractMismatches}}`:** Before dispatching synthesis, compare each plan's `inputs.md` "From plans" references against the corresponding upstream plan's `outputs.md`. Flag items referenced in inputs that don't appear in upstream outputs. Pass these as `{{contractMismatches}}` to the synthesis prompt.
 
 ### Phase 3: Report
 

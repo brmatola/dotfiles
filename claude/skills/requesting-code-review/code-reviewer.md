@@ -60,6 +60,21 @@ git diff {BASE_SHA}..{HEAD_SHA}
 - Documentation complete?
 - No obvious bugs?
 
+## Plan Outputs
+
+{PLAN_OUTPUTS}
+
+## Output Verification
+
+If `{PLAN_OUTPUTS}` is provided above, verify each stated output exists in the implementation:
+
+- Check: files created, types/interfaces exported, CLI commands registered, config options present — whatever the outputs.md promises
+- Each output item gets a **pass** or **fail**
+- Summary: "N/M outputs verified"
+- If any output fails: assessment cannot be "Ready to merge" — must be "With fixes" at minimum
+
+If `{PLAN_OUTPUTS}` is empty, skip this section.
+
 ## Output Format
 
 ### Strengths

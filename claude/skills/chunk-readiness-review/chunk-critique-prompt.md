@@ -18,6 +18,9 @@ You are an adversarial reviewer. Your job is to find reasons this chunk will fai
 **Cross-chunk edges (boundaries with other chunks):**
 {{crossChunkEdges}}
 
+**Contract context (upstream outputs for cross-chunk dependencies):**
+{{contractContext}}
+
 ## Critical Constraint
 
 **Do NOT write Python, jq, or any scripts.** Read files with the Read tool. Write your findings as markdown. No JSON output.
@@ -69,6 +72,18 @@ Where will the implementer get stuck?
 - Integration points where multiple systems meet
 - Steps where the plan says what but not how, and the how is non-obvious
 
+### Pass 5: Contract Coherence
+
+Do the plan's contracts accurately describe its boundaries?
+
+- Does this plan's `inputs.md` accurately describe what it needs?
+- Does the `outputs.md` clearly state what this plan produces?
+- For each upstream dependency: do the inputs match what the upstream `outputs.md` promises?
+- Are there implicit inputs not declared in `inputs.md`?
+- Are there outputs the plan clearly produces but doesn't declare?
+
+If no contract files exist for a plan, note it as a warning — not an error.
+
 3. For each issue found, be specific — quote the plan text that's problematic.
 
 4. Note boundary interactions for plans with cross-chunk edges.
@@ -119,5 +134,5 @@ Important:
 - Quote specific plan text in findings — don't be vague
 - Be adversarial, not hostile. The goal is to improve the plan, not reject it.
 - Only flag issues that would actually cause problems. No nitpicking.
-- Use the category names: `cohesion`, `assumptions`, `edge_cases`, `complexity`
+- Use the category names: `cohesion`, `assumptions`, `edge_cases`, `complexity`, `contracts`
 - If a section has no items, write "None" under it

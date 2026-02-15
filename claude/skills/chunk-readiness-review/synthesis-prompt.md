@@ -18,6 +18,9 @@ You are synthesizing adversarial reviews across chunks. Individual chunks have b
 **Cohesion Verdicts:**
 {{cohesionVerdicts}}
 
+**Contract Mismatches (inputs referencing outputs not found upstream):**
+{{contractMismatches}}
+
 ## Critical Constraint
 
 **Do NOT write Python, jq, or any scripts.** Read files with the Read tool. Write your findings as markdown. No JSON output.
@@ -43,6 +46,11 @@ You are synthesizing adversarial reviews across chunks. Individual chunks have b
 4. **Assumption Conflicts**
    - Do different chunks make contradictory assumptions? (e.g., one assumes REST, another assumes GraphQL)
    - Are there shared concepts with inconsistent definitions across chunks?
+
+5. **Contract Alignment**
+   - For each cross-chunk edge, check if the downstream plan's `inputs.md` matches the upstream plan's `outputs.md`
+   - Flag width mismatches: consuming more than what's offered, or offering things nobody consumes
+   - If `{{contractMismatches}}` lists any items, treat each as at least a warning
 
 ## Output Format
 
@@ -80,6 +88,6 @@ Cross-chunk synthesis: {N} edges checked, {findings} issues. {brief}.
 ```
 
 Important:
-- Use category names: `boundary_cohesion`, `workset_justification`, `missing_chunks`, `assumption_conflicts`
+- Use category names: `boundary_cohesion`, `workset_justification`, `missing_chunks`, `assumption_conflicts`, `contract_alignment`
 - Be specific about which plans and chunks are involved
 - If no issues found, write "None" under each finding section and use verdict READY

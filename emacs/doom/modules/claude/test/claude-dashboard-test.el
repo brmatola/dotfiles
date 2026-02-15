@@ -129,7 +129,7 @@
             (claude-dashboard-test--make-workspace "myrepo-old" "old" "failed"))))
     (claude-dashboard--paint)
     (should (string-match-p "creating" (buffer-string)))
-    (should (string-match-p "failed" (buffer-string)))))
+    (should (string-match-p "needs sync" (buffer-string)))))
 
 (ert-deftest claude-dashboard-test-error-rendering ()
   "Test error state rendering."
@@ -186,6 +186,8 @@
     ;; mode-line-format is a list of strings; join and check
     (let ((ml-str (mapconcat #'identity mode-line-format "")))
       (should (string-match-p "c:new" ml-str))
+      (should (string-match-p "m:merge" ml-str))
+      (should (string-match-p "d:delete" ml-str))
       (should (string-match-p "TAB" ml-str)))))
 
 (ert-deftest claude-dashboard-test-multiple-repos ()
@@ -413,7 +415,7 @@
       (let ((content (buffer-string)))
         (should (string-match-p "⚡ " content))
         (should (string-match-p "◌" content))
-        (should (string-match-p "✖" content))))))
+        (should (string-match-p "⚠" content))))))
 
 ;;; Trellis Ready Plans Tests
 
@@ -847,6 +849,53 @@
                             (claude-dashboard--format-duration old))))
   ;; nil → nil
   (should (null (claude-dashboard--format-duration nil))))
+
+;;; Button Rendering Tests
+
+(ert-deftest claude-dashboard-test-active-worktree-buttons ()
+  "Test that active worktrees show Merge and Delete buttons."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (setq claude-dashboard--grove-cache
+          (claude-dashboard-test--make-grove-data
+           (claude-dashboard-test--make-repo
+            "myrepo" "/tmp/myrepo"
+            (claude-dashboard-test--make-workspace "myrepo-feat" "feat" "active"))))
+    (claude-dashboard--paint)
+    (let ((content (buffer-string)))
+      (should (string-match-p "Merge" content))
+      (should (string-match-p "Delete" content))
+      (should-not (string-match-p " Close " content)))))
+
+(ert-deftest claude-dashboard-test-failed-worktree-buttons ()
+  "Test that failed worktrees show Sync and Delete buttons."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (setq claude-dashboard--grove-cache
+          (claude-dashboard-test--make-grove-data
+           (claude-dashboard-test--make-repo
+            "myrepo" "/tmp/myrepo"
+            (claude-dashboard-test--make-workspace "myrepo-bad" "bad" "failed"))))
+    (claude-dashboard--paint)
+    (let ((content (buffer-string)))
+      (should (string-match-p "Sync" content))
+      (should (string-match-p "Delete" content))
+      (should-not (string-match-p "Merge" content)))))
+
+(ert-deftest claude-dashboard-test-creating-worktree-no-buttons ()
+  "Test that creating/closing worktrees show no action buttons."
+  (with-temp-buffer
+    (claude-dashboard-mode)
+    (setq claude-dashboard--grove-cache
+          (claude-dashboard-test--make-grove-data
+           (claude-dashboard-test--make-repo
+            "myrepo" "/tmp/myrepo"
+            (claude-dashboard-test--make-workspace "myrepo-new" "new" "creating"))))
+    (claude-dashboard--paint)
+    (let ((content (buffer-string)))
+      (should-not (string-match-p " Jump " content))
+      (should-not (string-match-p " Merge " content))
+      (should-not (string-match-p " Delete " content)))))
 
 (provide 'claude-dashboard-test)
 ;;; claude-dashboard-test.el ends here

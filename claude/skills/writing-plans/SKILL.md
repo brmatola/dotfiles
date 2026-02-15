@@ -98,16 +98,20 @@ git commit -m "feat: add specific feature"
 - Reference relevant skills with gremlins: prefix
 - DRY, YAGNI, TDD, frequent commits
 
-## Trellis Frontmatter (Conditional)
+## Trellis Plan Contracts (Conditional)
 
-After saving the plan, check if the repo uses trellis for plan tracking:
+After saving the implementation plan, check if the repo uses trellis for plan tracking:
 
 ```bash
 # Only emit frontmatter if trellis is configured
 test -f .trellis || trellis lint &>/dev/null
 ```
 
-If trellis is present, create/update `plans/active/{plan-name}/README.md` with frontmatter:
+If no `.trellis` config exists, skip this entire section silently.
+
+If trellis is present, create the plan folder with three files:
+
+### 1. `plans/active/{plan-name}/README.md`
 
 ```yaml
 ---
@@ -121,7 +125,51 @@ repo: <repo-name>
 
 Populate `repo` from `basename $(git rev-parse --show-toplevel)`. Leave `depends_on` and `tags` empty unless the user specifies dependencies.
 
-If no `.trellis` config exists, skip this step silently.
+### 2. `plans/active/{plan-name}/inputs.md`
+
+```markdown
+# Inputs
+
+## From plans
+
+<!-- Auto-populated from depends_on entries -->
+<!-- For each dependency, pull outputs via: trellis show <dep-id> --contracts -->
+
+## From existing code
+
+<!-- What existing code/APIs/state does this plan consume? -->
+```
+
+If `depends_on` has entries, run `trellis show <dep-id> --contracts` for each dependency and populate the "From plans" section with what the upstream plan's `outputs.md` promises. Format each as:
+
+```markdown
+### From: {dep-id}
+- {output item 1}
+- {output item 2}
+```
+
+### 3. `plans/active/{plan-name}/outputs.md`
+
+```markdown
+# Outputs
+
+<!-- What does this plan produce that downstream plans or users consume? -->
+<!-- Examples: files created, types/interfaces exported, CLI commands, config options, API endpoints -->
+```
+
+### Collaborative Output Drafting
+
+After writing the README and implementation plan, guide the user through defining outputs:
+
+> "What does this plan produce that other plans might consume? Think about: files created, interfaces exported, commands registered, config options added."
+
+Work with the user to fill `outputs.md` with concrete output items.
+
+### Readiness Gate
+
+**A plan isn't ready until `outputs.md` has at least one concrete output defined.** If the user skips output definition, note it as a warning:
+
+> "Warning: No outputs defined. Downstream plans won't be able to declare inputs from this plan."
 
 ## Execution Handoff
 
