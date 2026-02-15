@@ -406,13 +406,20 @@ Batches rapid tier 2 arrivals into a single repaint."
       (when home-attention
         (insert "  ")
         (claude-dashboard--insert-status "active" home-attention))
-      ;; Right-aligned Open button
+      ;; Right-aligned Open + New Worktree buttons
       (claude-dashboard--insert-right-aligned
-       (propertize " Open "
-                   'face 'claude-dashboard-button-face
-                   'mouse-face 'highlight
-                   'claude-dashboard-action 'open-home
-                   'claude-dashboard-entry-data (list :name name :path path))
+       (concat
+        (propertize " Open "
+                    'face 'claude-dashboard-button-face
+                    'mouse-face 'highlight
+                    'claude-dashboard-action 'open-home
+                    'claude-dashboard-entry-data (list :name name :path path))
+        " "
+        (propertize " + New Worktree "
+                    'face 'claude-dashboard-button-face
+                    'mouse-face 'highlight
+                    'claude-dashboard-action 'create-worktree
+                    'claude-dashboard-entry-data (list :name name :path path)))
        line-start)
       (insert "\n")
       ;; Apply text properties to entire line
@@ -443,21 +450,7 @@ Batches rapid tier 2 arrivals into a single repaint."
               (propertize "  (no active workspaces)"
                           'face 'claude-dashboard-footer-face)
               "\n"))
-    ;; New Worktree button
-    (let ((btn-start (point)))
-      (insert "   ")
-      (let ((line-start (point)))
-        (claude-dashboard--insert-right-aligned
-         (propertize " + New Worktree "
-                     'face 'claude-dashboard-button-face
-                     'mouse-face 'highlight
-                     'claude-dashboard-action 'create-worktree
-                     'claude-dashboard-entry-data (list :name name :path path))
-         line-start))
-      (insert "\n")
-      (put-text-property btn-start (point) 'claude-dashboard-entry-type 'button)
-      (put-text-property btn-start (point) 'claude-dashboard-entry-data
-                         (list :name name :path path)))))
+))
 
 (defun claude-dashboard--insert-worktree-entry (ws repo-name repo-path is-last)
   "Insert a worktree entry for WS under REPO-NAME.

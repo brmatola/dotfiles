@@ -585,8 +585,8 @@
             (claude-dashboard-test--make-workspace "dotfiles-fix" "fix" "active"))))
     (claude-dashboard--paint)
     (let ((positions (claude-dashboard--collect-entry-positions)))
-      ;; Should have at least: repo header, worktree, button
-      (should (>= (length positions) 3))
+      ;; Should have at least: repo header, worktree
+      (should (>= (length positions) 2))
       ;; All positions should have entry-type properties
       (dolist (pos positions)
         (should (get-text-property pos 'claude-dashboard-entry-type))))))
