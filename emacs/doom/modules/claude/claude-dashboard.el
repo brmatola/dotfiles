@@ -111,7 +111,7 @@
   "Face for idle/ready status.")
 
 (defface claude-dashboard-stopped-face
-  '((t :inherit shadow))
+  '((t :inherit warning))
   "Face for stopped status.")
 
 (defface claude-dashboard-footer-face
@@ -169,7 +169,7 @@ enriched with per-workspace git stats from tier 2.")
     map)
   "Keymap for Claude dashboard mode.")
 
-(define-derived-mode claude-dashboard-mode special-mode "Claude"
+(define-derived-mode claude-dashboard-mode special-mode "Canopy"
   "Major mode for the Claude mission control dashboard.
 
 \\{claude-dashboard-mode-map}"
@@ -425,7 +425,7 @@ MS-TIMESTAMP is epoch milliseconds from SAP."
 (defun claude-dashboard--insert-title ()
   "Insert the dashboard title."
   (insert "\n\n   "
-          (propertize "Claude Workspaces"
+          (propertize "Canopy"
                       'face 'claude-dashboard-title-face)
           "\n\n"))
 
@@ -1315,38 +1315,67 @@ Grove accepts both active and failed workspaces for sync."
              (claude-dashboard-refresh))))))))
 
 (defun claude-dashboard--resume-session (data)
-  "Resume the stopped session in workspace described by DATA."
+  "Resume the stopped session in workspace described by DATA.
+Checks whether Claude is still running in the vterm.  If so,
+just jumps to the workspace (the session is alive, SAP was stale).
+Only sends `claude --resume' when the shell is actually idle."
   (let* ((repo-name (plist-get data :repo-name))
          (branch (plist-get data :branch))
-         (sap-ws (format "%s:%s" repo-name branch)))
+         (ws-name (format "%s:%s" repo-name branch))
+         (buf-name (format "*claude:%s:%s*" repo-name branch))
+         (root (plist-get data :root))
+         (sap-ws ws-name))
     (claude-sap-latest sap-ws
       (lambda (ok latest _err)
         (when ok
-          (let ((session-id (plist-get latest :session_id))
-                (buf-name (format "*claude:%s:%s*" repo-name branch)))
-            ;; Switch to workspace
-            (claude-dashboard--jump-to-worktree data)
-            ;; Send resume command to vterm
-            (when (and session-id (get-buffer buf-name))
+          (let ((session-id (plist-get latest :session_id)))
+            ;; Ensure workspace + vterm exist
+            (unless (+workspace-exists-p ws-name)
+              (+workspace/new ws-name)
+              (when (and root (file-directory-p root))
+                (setq default-directory (file-name-as-directory root))
+                (claude-dashboard--create-vterm buf-name root t)))
+            ;; Switch to workspace + focus vterm
+            (+workspace/switch-to ws-name)
+            (when-let ((buf (get-buffer buf-name)))
+              (switch-to-buffer buf))
+            ;; Only send resume if shell is idle (no subprocess)
+            (when (and session-id
+                       (get-buffer buf-name)
+                       (not (claude-dashboard--vterm-has-subprocess-p buf-name)))
               (with-current-buffer (get-buffer buf-name)
                 (when (fboundp 'vterm-send-string)
                   (vterm-send-string
                    (format "claude --resume %s\n" session-id)))))))))))
 
 (defun claude-dashboard--resume-home (data)
-  "Resume the stopped home session for repo described by DATA."
+  "Resume the stopped home session for repo described by DATA.
+Same subprocess-check logic as `claude-dashboard--resume-session':
+if Claude is still running, just jump; otherwise send resume."
   (let* ((name (plist-get data :name))
+         (path (plist-get data :path))
          (branch (plist-get data :branch))
+         (ws-name (format "%s:home" name))
+         (buf-name (format "*claude:%s:home*" name))
          (sap-ws (format "%s:%s" name branch)))
     (claude-sap-latest sap-ws
       (lambda (ok latest _err)
         (when ok
-          (let ((session-id (plist-get latest :session_id))
-                (buf-name (format "*claude:%s:home*" name)))
-            ;; Switch to home workspace
-            (claude-dashboard--open-home data)
-            ;; Send resume command to vterm
-            (when (and session-id (get-buffer buf-name))
+          (let ((session-id (plist-get latest :session_id)))
+            ;; Ensure workspace + vterm exist
+            (unless (+workspace-exists-p ws-name)
+              (+workspace/new ws-name)
+              (when (and path (file-directory-p path))
+                (setq default-directory (file-name-as-directory path))
+                (claude-dashboard--create-vterm buf-name path t)))
+            ;; Switch to workspace + focus vterm
+            (+workspace/switch-to ws-name)
+            (when-let ((buf (get-buffer buf-name)))
+              (switch-to-buffer buf))
+            ;; Only send resume if shell is idle (no subprocess)
+            (when (and session-id
+                       (get-buffer buf-name)
+                       (not (claude-dashboard--vterm-has-subprocess-p buf-name)))
               (with-current-buffer (get-buffer buf-name)
                 (when (fboundp 'vterm-send-string)
                   (vterm-send-string
@@ -1384,14 +1413,33 @@ Grove accepts both active and failed workspaces for sync."
            (with-current-buffer buf
              (claude-dashboard-refresh))))))))
 
+;;; Subprocess Detection
+
+(defun claude-dashboard--vterm-has-subprocess-p (buf-name)
+  "Return non-nil if the vterm buffer BUF-NAME has a child process.
+Uses pgrep to check if the shell in the vterm has children (i.e.
+Claude is running).  Returns nil if the buffer doesn't exist, has
+no process, or pgrep fails."
+  (when-let ((buf (get-buffer buf-name)))
+    (when-let ((proc (get-buffer-process buf)))
+      (let ((pid (process-id proc)))
+        (when pid
+          (condition-case nil
+              (= 0 (call-process "pgrep" nil nil nil
+                                  "-P" (number-to-string pid)))
+            (error nil)))))))
+
 ;;; vterm Helper
 
-(defun claude-dashboard--create-vterm (buffer-name dir)
-  "Create a vterm buffer named BUFFER-NAME in directory DIR and start Claude."
+(defun claude-dashboard--create-vterm (buffer-name dir &optional no-claude)
+  "Create a vterm buffer named BUFFER-NAME in directory DIR.
+When NO-CLAUDE is nil, starts Claude after cd+clear.
+When NO-CLAUDE is non-nil, only cd+clear (no Claude startup)."
   (let ((default-directory (file-name-as-directory (expand-file-name dir))))
     (with-current-buffer (vterm buffer-name)
       (vterm-send-string (format "cd %s && clear\n" (shell-quote-argument dir)))
-      (vterm-send-string "claude\n")
+      (unless no-claude
+        (vterm-send-string "claude\n"))
       (current-buffer))))
 
 ;;; Mouse Support

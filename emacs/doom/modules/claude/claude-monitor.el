@@ -12,8 +12,9 @@
 
 ;;; Customization
 
-(defcustom claude-monitor-interval 2
-  "Seconds between SAP status polls."
+(defcustom claude-monitor-interval 5
+  "Seconds between SAP status polls.
+File watcher handles the fast path; this timer is a fallback."
   :type 'integer
   :group 'claude)
 
@@ -28,6 +29,12 @@ NEW-STATUS is a symbol: `active', `idle', `attention', `stopped', or nil.")
 
 (defvar claude-monitor-timer nil
   "Timer for SAP polling.")
+
+(defvar claude-monitor--file-watch nil
+  "File notify descriptor for SAP db directory.")
+
+(defvar claude-monitor--file-watch-debounce nil
+  "Timer for debouncing file watch events.")
 
 (defvar claude--workspace-states (make-hash-table :test 'equal)
   "Hash table mapping workspace name to (STATE . SESSION-PLIST).
@@ -53,9 +60,9 @@ Returns \"REPO:BRANCH\" or nil."
 
 ;;; SAP CLI Wrapper
 
-(defcustom claude-stopped-expiry 1800
+(defcustom claude-stopped-expiry nil
   "Seconds after which stopped sessions are cleared from state.
-Set to nil to disable expiry.  Default is 1800 (30 minutes)."
+Set to nil to disable expiry."
   :type '(choice integer (const nil))
   :group 'claude)
 
@@ -266,25 +273,78 @@ Session fields: :session_id :workspace :state :started_at
 :last_event_at :last_tool :last_tool_detail :transcript_path."
   (cdr (gethash workspace claude--workspace-states)))
 
+;;; File Watcher
+
+(defun claude-monitor--sap-db-dir ()
+  "Return the SAP database directory path.
+Uses SAP_DB_PATH environment variable if set, otherwise ~/.sap/."
+  (or (getenv "SAP_DB_PATH")
+      (expand-file-name "~/.sap/")))
+
+(defun claude-monitor--on-sap-db-change (_event)
+  "Handle SAP db file change EVENT with debouncing.
+Triggers an immediate poll after a short delay to batch rapid writes."
+  (when claude-monitor--file-watch-debounce
+    (cancel-timer claude-monitor--file-watch-debounce))
+  (setq claude-monitor--file-watch-debounce
+        (run-at-time 0.3 nil #'claude--poll-sap)))
+
+(defun claude-monitor--start-file-watch ()
+  "Start watching the SAP db directory for changes."
+  (unless claude-monitor--file-watch
+    (let ((dir (claude-monitor--sap-db-dir)))
+      (when (file-directory-p dir)
+        (condition-case nil
+            (setq claude-monitor--file-watch
+                  (file-notify-add-watch dir '(change)
+                                         #'claude-monitor--on-sap-db-change))
+          (error nil))))))
+
+(defun claude-monitor--stop-file-watch ()
+  "Stop watching the SAP db directory."
+  (when claude-monitor--file-watch-debounce
+    (cancel-timer claude-monitor--file-watch-debounce)
+    (setq claude-monitor--file-watch-debounce nil))
+  (when claude-monitor--file-watch
+    (file-notify-rm-watch claude-monitor--file-watch)
+    (setq claude-monitor--file-watch nil)))
+
+;;; Focus-In Handler
+
+(defun claude-monitor--on-focus-change ()
+  "Handle Emacs focus change (e.g. after sleep/wake).
+When any frame gains focus, clears stale pending requests and
+triggers an immediate poll."
+  (when (and claude-monitor-timer
+             (cl-some #'frame-focus-state (frame-list)))
+    (clrhash claude-sap--pending)
+    (claude--poll-sap)))
+
 ;;; Monitor Control
 
 ;;;###autoload
 (defun claude-monitor-start ()
-  "Start SAP polling."
+  "Start SAP polling and file watcher."
   (interactive)
   (unless claude-monitor-timer
     (setq claude-monitor-timer
           (run-with-timer claude-monitor-interval
                           claude-monitor-interval
-                          #'claude--poll-sap))))
+                          #'claude--poll-sap)))
+  (claude-monitor--start-file-watch)
+  (add-function :after after-focus-change-function
+                #'claude-monitor--on-focus-change))
 
 ;;;###autoload
 (defun claude-monitor-stop ()
-  "Stop SAP polling and clear state."
+  "Stop SAP polling, file watcher, and clear state."
   (interactive)
   (when claude-monitor-timer
     (cancel-timer claude-monitor-timer)
     (setq claude-monitor-timer nil))
+  (claude-monitor--stop-file-watch)
+  (remove-function after-focus-change-function
+                   #'claude-monitor--on-focus-change)
   (clrhash claude--workspace-states))
 
 ;;;###autoload

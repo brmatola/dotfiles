@@ -54,7 +54,7 @@
     (claude-dashboard-mode)
     (setq claude-dashboard--grove-cache (list :repos []))
     (claude-dashboard--paint)
-    (should (string-match-p "Claude Workspaces" (buffer-string)))
+    (should (string-match-p "Canopy" (buffer-string)))
     (should (string-match-p "No repos registered" (buffer-string)))))
 
 (ert-deftest claude-dashboard-test-paint-repo-no-workspaces ()
@@ -896,6 +896,179 @@
       (should-not (string-match-p " Jump " content))
       (should-not (string-match-p " Merge " content))
       (should-not (string-match-p " Delete " content)))))
+
+;;; Subprocess Detection Tests
+
+(ert-deftest claude-dashboard-test-subprocess-detected ()
+  "Test that subprocess detection returns t when pgrep succeeds."
+  (let ((buf (generate-new-buffer "*claude:test:sub*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'get-buffer-process)
+                   (lambda (_buf) 'fake-proc))
+                  ((symbol-function 'process-id)
+                   (lambda (_proc) 12345))
+                  ((symbol-function 'call-process)
+                   (lambda (_prog _infile _dest _display &rest _args)
+                     0)))
+          (should (claude-dashboard--vterm-has-subprocess-p
+                   "*claude:test:sub*")))
+      (kill-buffer buf))))
+
+(ert-deftest claude-dashboard-test-no-subprocess ()
+  "Test that subprocess detection returns nil when pgrep finds nothing."
+  (let ((buf (generate-new-buffer "*claude:test:nosub*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'get-buffer-process)
+                   (lambda (_buf) 'fake-proc))
+                  ((symbol-function 'process-id)
+                   (lambda (_proc) 12345))
+                  ((symbol-function 'call-process)
+                   (lambda (_prog _infile _dest _display &rest _args)
+                     1)))
+          (should-not (claude-dashboard--vterm-has-subprocess-p
+                       "*claude:test:nosub*")))
+      (kill-buffer buf))))
+
+;;; Create-Vterm Tests
+
+(ert-deftest claude-dashboard-test-create-vterm-sends-claude ()
+  "Test that create-vterm sends claude command by default."
+  (let ((sent-strings nil))
+    (cl-letf (((symbol-function 'vterm)
+               (lambda (_name) (current-buffer)))
+              ((symbol-function 'vterm-send-string)
+               (lambda (str) (push str sent-strings))))
+      (claude-dashboard--create-vterm "*test*" "/tmp")
+      (setq sent-strings (nreverse sent-strings))
+      ;; Should have cd+clear and claude
+      (should (= (length sent-strings) 2))
+      (should (string-match-p "cd.*clear" (nth 0 sent-strings)))
+      (should (equal (nth 1 sent-strings) "claude\n")))))
+
+(ert-deftest claude-dashboard-test-create-vterm-no-claude ()
+  "Test that create-vterm with no-claude skips claude command."
+  (let ((sent-strings nil))
+    (cl-letf (((symbol-function 'vterm)
+               (lambda (_name) (current-buffer)))
+              ((symbol-function 'vterm-send-string)
+               (lambda (str) (push str sent-strings))))
+      (claude-dashboard--create-vterm "*test*" "/tmp" t)
+      ;; Should only have cd+clear, no claude
+      (should (= (length sent-strings) 1))
+      (should (string-match-p "cd.*clear" (car sent-strings))))))
+
+;;; Resume Tests
+
+(ert-deftest claude-dashboard-test-resume-skips-when-subprocess ()
+  "Test that resume does not send command when Claude is running."
+  (let ((sent-strings nil)
+        (latest-callback nil))
+    (cl-letf (((symbol-function 'claude-sap-latest)
+               (lambda (_ws callback)
+                 (setq latest-callback callback)))
+              ((symbol-function '+workspace-exists-p)
+               (lambda (_) t))
+              ((symbol-function '+workspace/switch-to)
+               (lambda (_) nil))
+              ((symbol-function 'claude-dashboard--vterm-has-subprocess-p)
+               (lambda (_) t))
+              ((symbol-function 'vterm-send-string)
+               (lambda (str) (push str sent-strings))))
+      ;; Create the vterm buffer so get-buffer finds it
+      (let ((buf (generate-new-buffer "*claude:repo:branch*")))
+        (unwind-protect
+            (progn
+              (claude-dashboard--resume-session
+               (list :repo-name "repo" :branch "branch"
+                     :root "/tmp/branch"))
+              ;; Invoke the callback with session data
+              (funcall latest-callback t
+                       (list :session_id "sess-123") nil)
+              ;; Should NOT have sent resume command
+              (should (null sent-strings)))
+          (kill-buffer buf))))))
+
+(ert-deftest claude-dashboard-test-resume-sends-when-idle ()
+  "Test that resume sends command when shell is idle."
+  (let ((sent-strings nil)
+        (latest-callback nil))
+    (cl-letf (((symbol-function 'claude-sap-latest)
+               (lambda (_ws callback)
+                 (setq latest-callback callback)))
+              ((symbol-function '+workspace-exists-p)
+               (lambda (_) t))
+              ((symbol-function '+workspace/switch-to)
+               (lambda (_) nil))
+              ((symbol-function 'claude-dashboard--vterm-has-subprocess-p)
+               (lambda (_) nil))
+              ((symbol-function 'vterm-send-string)
+               (lambda (str) (push str sent-strings))))
+      (let ((buf (generate-new-buffer "*claude:repo:branch*")))
+        (unwind-protect
+            (progn
+              (claude-dashboard--resume-session
+               (list :repo-name "repo" :branch "branch"
+                     :root "/tmp/branch"))
+              (funcall latest-callback t
+                       (list :session_id "sess-123") nil)
+              ;; Should have sent resume command
+              (should (= (length sent-strings) 1))
+              (should (string-match-p "claude --resume sess-123"
+                                      (car sent-strings))))
+          (kill-buffer buf))))))
+
+(ert-deftest claude-dashboard-test-resume-home-skips-when-subprocess ()
+  "Test that resume-home does not send when Claude is running."
+  (let ((sent-strings nil)
+        (latest-callback nil))
+    (cl-letf (((symbol-function 'claude-sap-latest)
+               (lambda (_ws callback)
+                 (setq latest-callback callback)))
+              ((symbol-function '+workspace-exists-p)
+               (lambda (_) t))
+              ((symbol-function '+workspace/switch-to)
+               (lambda (_) nil))
+              ((symbol-function 'claude-dashboard--vterm-has-subprocess-p)
+               (lambda (_) t))
+              ((symbol-function 'vterm-send-string)
+               (lambda (str) (push str sent-strings))))
+      (let ((buf (generate-new-buffer "*claude:myrepo:home*")))
+        (unwind-protect
+            (progn
+              (claude-dashboard--resume-home
+               (list :name "myrepo" :path "/tmp/myrepo" :branch "main"))
+              (funcall latest-callback t
+                       (list :session_id "sess-456") nil)
+              (should (null sent-strings)))
+          (kill-buffer buf))))))
+
+(ert-deftest claude-dashboard-test-resume-home-sends-when-idle ()
+  "Test that resume-home sends command when shell is idle."
+  (let ((sent-strings nil)
+        (latest-callback nil))
+    (cl-letf (((symbol-function 'claude-sap-latest)
+               (lambda (_ws callback)
+                 (setq latest-callback callback)))
+              ((symbol-function '+workspace-exists-p)
+               (lambda (_) t))
+              ((symbol-function '+workspace/switch-to)
+               (lambda (_) nil))
+              ((symbol-function 'claude-dashboard--vterm-has-subprocess-p)
+               (lambda (_) nil))
+              ((symbol-function 'vterm-send-string)
+               (lambda (str) (push str sent-strings))))
+      (let ((buf (generate-new-buffer "*claude:myrepo:home*")))
+        (unwind-protect
+            (progn
+              (claude-dashboard--resume-home
+               (list :name "myrepo" :path "/tmp/myrepo" :branch "main"))
+              (funcall latest-callback t
+                       (list :session_id "sess-456") nil)
+              ;; Should have sent resume command
+              (should (= (length sent-strings) 1))
+              (should (string-match-p "claude --resume sess-456"
+                                      (car sent-strings))))
+          (kill-buffer buf))))))
 
 (provide 'claude-dashboard-test)
 ;;; claude-dashboard-test.el ends here

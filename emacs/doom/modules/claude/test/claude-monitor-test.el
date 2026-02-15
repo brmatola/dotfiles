@@ -337,5 +337,64 @@ EXTRAS is an optional plist of additional fields."
     (claude-monitor-stop)
     (should (null (claude-workspace-attention "ws:a")))))
 
+;;; File Watcher Tests
+
+(ert-deftest claude-monitor-test-file-watch-starts-with-monitor ()
+  "Test that file watcher starts when monitor starts."
+  (let ((claude-monitor-timer nil)
+        (claude-monitor--file-watch nil)
+        (claude-monitor--file-watch-debounce nil)
+        (watch-started nil))
+    (cl-letf (((symbol-function 'run-with-timer)
+               (lambda (&rest _) 'fake-timer))
+              ((symbol-function 'claude-monitor--start-file-watch)
+               (lambda () (setq watch-started t)))
+              ((symbol-function 'add-function) (lambda (&rest _) nil)))
+      (claude-monitor-start)
+      (should watch-started))
+    ;; Clean up
+    (when (timerp claude-monitor-timer)
+      (cancel-timer claude-monitor-timer))
+    (setq claude-monitor-timer nil)))
+
+(ert-deftest claude-monitor-test-file-watch-stops-with-monitor ()
+  "Test that file watcher stops when monitor stops."
+  (let ((claude-monitor-timer 'fake-timer)
+        (claude-monitor--file-watch 'fake-watch)
+        (claude-monitor--file-watch-debounce nil)
+        (claude--workspace-states (make-hash-table :test 'equal))
+        (watch-stopped nil))
+    (cl-letf (((symbol-function 'cancel-timer) (lambda (_) nil))
+              ((symbol-function 'claude-monitor--stop-file-watch)
+               (lambda () (setq watch-stopped t)))
+              ((symbol-function 'remove-function) (lambda (&rest _) nil)))
+      (claude-monitor-stop)
+      (should watch-stopped))))
+
+;;; Focus Change Handler Tests
+
+(ert-deftest claude-monitor-test-focus-change-clears-pending ()
+  "Test that focus-change handler clears pending table and polls."
+  (let ((claude-monitor-timer 'fake-timer)
+        (claude-sap--pending (make-hash-table :test 'equal))
+        (polled nil))
+    (puthash "sap-status" 'fake-proc claude-sap--pending)
+    (cl-letf (((symbol-function 'claude--poll-sap)
+               (lambda () (setq polled t)))
+              ((symbol-function 'frame-focus-state)
+               (lambda (_) t)))
+      (claude-monitor--on-focus-change)
+      (should (= 0 (hash-table-count claude-sap--pending)))
+      (should polled))))
+
+(ert-deftest claude-monitor-test-focus-change-noop-when-stopped ()
+  "Test that focus-change is a no-op when monitor is not running."
+  (let ((claude-monitor-timer nil)
+        (polled nil))
+    (cl-letf (((symbol-function 'claude--poll-sap)
+               (lambda () (setq polled t))))
+      (claude-monitor--on-focus-change)
+      (should-not polled))))
+
 (provide 'claude-monitor-test)
 ;;; claude-monitor-test.el ends here

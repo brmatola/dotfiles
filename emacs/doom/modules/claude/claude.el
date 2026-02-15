@@ -33,7 +33,8 @@
       (with-current-buffer buf
         (claude-dashboard-mode)))
     (switch-to-buffer buf)
-    (claude-dashboard-refresh)))
+    (claude-dashboard-refresh)
+    (claude-monitor-start)))
 
 ;; Forward declarations for Doom workspace functions
 (declare-function +workspace-exists-p "~/.config/emacs/modules/ui/workspaces/autoload/workspaces")
