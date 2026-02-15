@@ -146,7 +146,8 @@ enriched with per-workspace git stats from tier 2.")
     (define-key map (kbd "RET") #'claude-dashboard-select)
     (define-key map "c" #'claude-dashboard-create)
     (define-key map "s" #'claude-dashboard-sync)
-    (define-key map "x" #'claude-dashboard-close)
+    (define-key map "m" #'claude-dashboard-merge)
+    (define-key map "d" #'claude-dashboard-delete)
     (define-key map "a" #'claude-dashboard-add-repo)
     (define-key map "r" #'claude-dashboard-remove-repo)
     (define-key map "j" #'claude-dashboard-next)
@@ -171,7 +172,7 @@ enriched with per-workspace git stats from tier 2.")
         mode-line-format
         (list "  "
               (propertize
-               "c:new  s:sync  x:close  a:add  r:remove  RET:jump  TAB:fold  ?:help"
+               "c:new  s:sync  m:merge  d:delete  a:add  r:remove  RET:jump  TAB:fold  ?:help"
                'face 'claude-dashboard-footer-face)))
   (claude-dashboard--setup-refresh-timer)
   (add-hook 'post-command-hook #'claude-dashboard--post-command nil t)
@@ -185,7 +186,8 @@ enriched with per-workspace git stats from tier 2.")
                 (evil-local-set-key 'normal (kbd "RET") #'claude-dashboard-select)
                 (evil-local-set-key 'normal "c" #'claude-dashboard-create)
                 (evil-local-set-key 'normal "s" #'claude-dashboard-sync)
-                (evil-local-set-key 'normal "x" #'claude-dashboard-close)
+                (evil-local-set-key 'normal "m" #'claude-dashboard-merge)
+                (evil-local-set-key 'normal "d" #'claude-dashboard-delete)
                 (evil-local-set-key 'normal "a" #'claude-dashboard-add-repo)
                 (evil-local-set-key 'normal "r" #'claude-dashboard-remove-repo)
                 (evil-local-set-key 'normal "j" #'claude-dashboard-next)
@@ -483,8 +485,9 @@ IS-LAST indicates if this is the last entry (affects tree drawing)."
     ;; Status indicator
     (insert "  ")
     (claude-dashboard--insert-status status attention)
-    ;; Right-aligned action buttons (only for active workspaces)
-    (when (equal status "active")
+    ;; Right-aligned action buttons (status-aware)
+    (cond
+     ((equal status "active")
       (claude-dashboard--insert-right-aligned
        (concat
         (propertize " Jump "
@@ -492,11 +495,34 @@ IS-LAST indicates if this is the last entry (affects tree drawing)."
                     'mouse-face 'highlight
                     'claude-dashboard-action 'jump-to-worktree)
         " "
-        (propertize " Close "
+        (propertize " Merge "
                     'face 'claude-dashboard-button-face
                     'mouse-face 'highlight
-                    'claude-dashboard-action 'close-worktree))
+                    'claude-dashboard-action 'merge-worktree)
+        " "
+        (propertize " Delete "
+                    'face 'claude-dashboard-button-face
+                    'mouse-face 'highlight
+                    'claude-dashboard-action 'delete-worktree))
        line-start))
+     ((equal status "failed")
+      (claude-dashboard--insert-right-aligned
+       (concat
+        (propertize " Jump "
+                    'face 'claude-dashboard-button-face
+                    'mouse-face 'highlight
+                    'claude-dashboard-action 'jump-to-worktree)
+        " "
+        (propertize " Sync "
+                    'face 'claude-dashboard-button-face
+                    'mouse-face 'highlight
+                    'claude-dashboard-action 'sync-worktree)
+        " "
+        (propertize " Delete "
+                    'face 'claude-dashboard-button-face
+                    'mouse-face 'highlight
+                    'claude-dashboard-action 'delete-worktree))
+       line-start)))
     (insert "\n")
     ;; Apply text properties
     (put-text-property line-start (point) 'claude-dashboard-entry-type 'worktree)
@@ -543,7 +569,7 @@ IS-LAST-WS indicates if this is under the last worktree entry."
    ((equal grove-status "closing")
     (insert (propertize "◌ closing…" 'face 'claude-dashboard-lifecycle-face)))
    ((equal grove-status "failed")
-    (insert (propertize "✖ failed" 'face 'claude-dashboard-failed-face)))
+    (insert (propertize "⚠ needs sync" 'face 'claude-dashboard-failed-face)))
    ;; Active — use attention
    ((equal grove-status "active")
     (pcase attention
@@ -574,7 +600,7 @@ IS-LAST-WS indicates if this is under the last worktree entry."
             (propertize (make-string rule-width ?─)
                         'face 'claude-dashboard-footer-face)
             "\n   "
-            (propertize "c new   s sync   x close   a add   r remove   RET jump   TAB fold   ? help"
+            (propertize "c new   s sync   m merge   d delete   a add   r remove   RET jump   TAB fold   ? help"
                         'face 'claude-dashboard-footer-face)
             "\n")))
 
@@ -929,7 +955,9 @@ grove repo, to avoid touching unrelated workspaces."
     ('open-home (claude-dashboard--open-home data))
     ('jump-to-worktree (claude-dashboard--jump-to-worktree data))
     ('create-worktree (claude-dashboard--create-worktree data))
-    ('close-worktree (claude-dashboard--close-worktree data))))
+    ('merge-worktree (claude-dashboard--merge-worktree data))
+    ('delete-worktree (claude-dashboard--delete-worktree data))
+    ('sync-worktree (claude-dashboard--sync-worktree data))))
 
 (defun claude-dashboard-create ()
   "Create a new worktree in the repo at point."
@@ -943,11 +971,17 @@ grove repo, to avoid touching unrelated workspaces."
   (when-let ((data (claude-dashboard--worktree-at-point)))
     (claude-dashboard--sync-worktree data)))
 
-(defun claude-dashboard-close ()
-  "Close the worktree at point."
+(defun claude-dashboard-merge ()
+  "Merge and close the worktree at point."
   (interactive)
   (when-let ((data (claude-dashboard--worktree-at-point)))
-    (claude-dashboard--close-worktree data)))
+    (claude-dashboard--merge-worktree data)))
+
+(defun claude-dashboard-delete ()
+  "Delete the worktree at point."
+  (interactive)
+  (when-let ((data (claude-dashboard--worktree-at-point)))
+    (claude-dashboard--delete-worktree data)))
 
 (defun claude-dashboard-add-repo ()
   "Add a repo to the registry."
@@ -968,7 +1002,7 @@ grove repo, to avoid touching unrelated workspaces."
 (defun claude-dashboard-help ()
   "Show dashboard help."
   (interactive)
-  (message "RET:jump  c:new  s:sync  x:close  a:add  r:remove  n/p:nav  TAB:fold  g:refresh  q:quit"))
+  (message "RET:jump  c:new  s:sync  m:merge  d:delete  a:add  r:remove  n/p:nav  TAB:fold  g:refresh  q:quit"))
 
 ;;; Context Helpers
 
@@ -1122,7 +1156,8 @@ Returns list of plists (:id ... :title ...) or nil."
            (claude-dashboard-refresh)))))))
 
 (defun claude-dashboard--sync-worktree (data)
-  "Sync the worktree described by DATA."
+  "Sync the worktree described by DATA.
+Grove accepts both active and failed workspaces for sync."
   (let ((branch (plist-get data :branch))
         (repo-name (plist-get data :repo-name)))
     (message "Grove: syncing %s/%s..." repo-name branch)
@@ -1132,44 +1167,61 @@ Returns list of plists (:id ... :title ...) or nil."
        (if ok
            (message "Grove: synced %s/%s" repo-name branch)
          (message "Grove: sync failed — %s" error-msg))
-       ;; Refresh dashboard
        (when-let ((buf (get-buffer "*claude:dashboard*")))
          (with-current-buffer buf
            (claude-dashboard-refresh)))))))
 
-(defun claude-dashboard--close-worktree (data)
-  "Close the worktree described by DATA."
+(defun claude-dashboard--merge-worktree (data)
+  "Merge and close the worktree described by DATA."
   (let ((branch (plist-get data :branch))
         (repo-name (plist-get data :repo-name))
         (root (plist-get data :root)))
-    (let ((mode (read-char-choice
-                 (format "Close %s/%s — [m]erge or [d]iscard? " repo-name branch)
-                 '(?m ?d))))
-      (let ((close-mode (if (= mode ?m) 'merge 'discard)))
-        (message "Grove: closing %s/%s (%s)..." repo-name branch close-mode)
-        (claude-grove-workspace-close
-         branch close-mode
-         (lambda (ok _data error-msg)
-           (if (not ok)
-               (message "Grove: close failed — %s" error-msg)
-             ;; Success: kill vterm + Doom workspace
-             (let ((ws-name (format "%s:%s" repo-name branch))
-                   (buf-name (format "*claude:%s:%s*" repo-name branch)))
-               ;; Kill vterm buffer
-               (when-let ((buf (get-buffer buf-name)))
-                 (let ((kill-buffer-query-functions nil))
-                   (kill-buffer buf)))
-               ;; Delete Doom workspace
-               (when (+workspace-exists-p ws-name)
-                 (+workspace-kill ws-name))
-               ;; Remove from projectile known projects
-               (when root
-                 (claude-dashboard--remove-project root))
-               (message "Grove: closed %s/%s" repo-name branch)))
-           ;; Refresh dashboard
-           (when-let ((buf (get-buffer "*claude:dashboard*")))
-             (with-current-buffer buf
-               (claude-dashboard-refresh)))))))))
+    (message "Grove: merging %s/%s..." repo-name branch)
+    (claude-grove-workspace-close
+     branch 'merge
+     (lambda (ok _data error-msg)
+       (if (not ok)
+           (message "Grove: merge failed — %s" error-msg)
+         ;; Success: kill vterm + Doom workspace
+         (let ((ws-name (format "%s:%s" repo-name branch))
+               (buf-name (format "*claude:%s:%s*" repo-name branch)))
+           (when-let ((buf (get-buffer buf-name)))
+             (let ((kill-buffer-query-functions nil))
+               (kill-buffer buf)))
+           (when (+workspace-exists-p ws-name)
+             (+workspace-kill ws-name))
+           (when root
+             (claude-dashboard--remove-project root))
+           (message "Grove: merged %s/%s" repo-name branch)))
+       (when-let ((buf (get-buffer "*claude:dashboard*")))
+         (with-current-buffer buf
+           (claude-dashboard-refresh)))))))
+
+(defun claude-dashboard--delete-worktree (data)
+  "Delete the worktree described by DATA after confirmation."
+  (let ((branch (plist-get data :branch))
+        (repo-name (plist-get data :repo-name))
+        (root (plist-get data :root)))
+    (when (y-or-n-p (format "Delete %s/%s? All changes will be lost. " repo-name branch))
+      (message "Grove: deleting %s/%s..." repo-name branch)
+      (claude-grove-workspace-close
+       branch 'discard
+       (lambda (ok _data error-msg)
+         (if (not ok)
+             (message "Grove: delete failed — %s" error-msg)
+           (let ((ws-name (format "%s:%s" repo-name branch))
+                 (buf-name (format "*claude:%s:%s*" repo-name branch)))
+             (when-let ((buf (get-buffer buf-name)))
+               (let ((kill-buffer-query-functions nil))
+                 (kill-buffer buf)))
+             (when (+workspace-exists-p ws-name)
+               (+workspace-kill ws-name))
+             (when root
+               (claude-dashboard--remove-project root))
+             (message "Grove: deleted %s/%s" repo-name branch)))
+         (when-let ((buf (get-buffer "*claude:dashboard*")))
+           (with-current-buffer buf
+             (claude-dashboard-refresh))))))))
 
 (defun claude-dashboard--add-repo ()
   "Prompt for a directory and add it to the repo registry."
