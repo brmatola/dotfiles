@@ -1,6 +1,7 @@
 # Taps
 tap "homebrew/bundle"
 tap "cargo-lambda/cargo-lambda"
+tap "d12frosted/emacs-plus"
 tap "localstack/tap"
 tap "wix/brew"
 
@@ -43,7 +44,7 @@ brew "gh"
 
 # Applications
 cask "bruno"
-cask "emacs-app"
+cask "emacs-plus-app"
 cask "google-cloud-sdk"
 cask "kegworks"
 cask "miniconda"
