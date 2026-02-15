@@ -29,6 +29,10 @@ BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
+**1.5. Check for plan contracts:**
+
+If the plan has an `outputs.md` (`plans/active/{plan-name}/outputs.md`), read it and include its contents as the `{PLAN_OUTPUTS}` placeholder in the code-reviewer template. If no `outputs.md` exists, leave `{PLAN_OUTPUTS}` empty.
+
 **2. Dispatch code-reviewer subagent:**
 
 Use Task tool with gremlins:code-reviewer type, fill template at `code-reviewer.md`
@@ -39,6 +43,7 @@ Use Task tool with gremlins:code-reviewer type, fill template at `code-reviewer.
 - `{BASE_SHA}` - Starting commit
 - `{HEAD_SHA}` - Ending commit
 - `{DESCRIPTION}` - Brief summary
+- `{PLAN_OUTPUTS}` - Contents of outputs.md (if present)
 
 **3. Act on feedback:**
 - Fix Critical issues immediately
