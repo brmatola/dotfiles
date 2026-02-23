@@ -59,11 +59,27 @@
       "Bash(cargo *)",
       "Bash(go *)",
       "Bash(python *)",
+      "Bash(python3 *)",
       "Bash(pytest *)",
       "Bash(brew *)",
       "Bash(grove *)",
       "Bash(trellis *)",
-      "Bash(sap *)"
+      "Bash(sap *)",
+      "Bash(node *)",
+      "Bash(rm *)",
+      "Bash(for *)",
+      "Bash(test *)",
+      "Bash(sqlite3 *)",
+      "Bash(bash *)",
+      "Bash(rmdir *)",
+      "Bash(timeout *)",
+      "Bash(sleep *)",
+      "Bash(tar *)",
+      "Bash(md5 *)",
+      "Bash(xxd *)",
+      "WebFetch",
+      "WebSearch",
+      "mcp__trellis__*"
     ]
   },
   "hooks": {
