@@ -6,10 +6,8 @@
       "Grep",
       "Write",
       "Edit",
-
       "Bash(git *)",
       "Bash(gh *)",
-
       "Bash(ls*)",
       "Bash(pwd)",
       "Bash(find *)",
@@ -21,7 +19,6 @@
       "Bash(realpath *)",
       "Bash(dirname *)",
       "Bash(basename *)",
-
       "Bash(cat *)",
       "Bash(head *)",
       "Bash(tail *)",
@@ -36,7 +33,6 @@
       "Bash(env)",
       "Bash(env *)",
       "Bash(printenv*)",
-
       "Bash(sort *)",
       "Bash(uniq *)",
       "Bash(cut *)",
@@ -49,14 +45,12 @@
       "Bash(tee *)",
       "Bash(grep *)",
       "Bash(rg *)",
-
       "Bash(mkdir *)",
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(touch *)",
       "Bash(chmod *)",
       "Bash(ln *)",
-
       "Bash(npm *)",
       "Bash(npx *)",
       "Bash(yarn *)",
@@ -66,7 +60,6 @@
       "Bash(go *)",
       "Bash(python *)",
       "Bash(pytest *)",
-
       "Bash(brew *)",
       "Bash(grove *)",
       "Bash(trellis *)",
@@ -75,25 +68,74 @@
   },
   "hooks": {
     "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "sap record --event session-start" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event session-start"
+          }
+        ]
+      }
     ],
     "SessionEnd": [
-      { "hooks": [{ "type": "command", "command": "sap record --event session-end" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event session-end"
+          }
+        ]
+      }
     ],
     "PreToolUse": [
-      { "hooks": [{ "type": "command", "command": "sap record --event tool-use" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event tool-use"
+          }
+        ]
+      }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "sap record --event turn-complete" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event turn-complete"
+          }
+        ]
+      }
     ],
     "PermissionRequest": [
-      { "hooks": [{ "type": "command", "command": "sap record --event attention-permission" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event attention-permission"
+          }
+        ]
+      }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "sap record --event user-prompt" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event user-prompt"
+          }
+        ]
+      }
     ],
     "Notification": [
-      { "hooks": [{ "type": "command", "command": "sap record --event attention-idle" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sap record --event attention-idle"
+          }
+        ]
+      }
     ]
   },
   "preferences": {
