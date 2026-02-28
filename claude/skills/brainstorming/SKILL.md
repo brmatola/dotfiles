@@ -42,7 +42,7 @@ Start by understanding the current project context, then ask questions one at a 
 
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"
-- The user will create a workspace via their editor — continue with gremlins:writing-plans to create the implementation plan
+- Continue with writing-plans to create the implementation plan
 
 ## Key Principles
 

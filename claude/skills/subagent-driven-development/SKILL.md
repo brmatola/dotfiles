@@ -35,7 +35,7 @@ Execute plan by dispatching fresh subagent per task, with two-stage review after
    - If quality issues: implementer fixes, re-review
    - Mark task complete
 3. After all tasks: dispatch final code reviewer for entire implementation
-4. Use gremlins:finishing-a-development-branch
+4. Use finishing-a-development-branch
 
 ## Prompt Templates
 
@@ -58,7 +58,7 @@ Task 1: Hook installation script
 
 Implementer: "Before I begin - should the hook be installed at user or system level?"
 
-You: "User level (~/.config/gremlins/hooks/)"
+You: "User level (~/.config/hooks/)"
 
 Implementer: "Got it. Implementing now..."
 [Later] Implementer:
@@ -108,12 +108,12 @@ Task 2: Recovery modes
 ## Integration
 
 **Required workflow skills:**
-- **gremlins:writing-plans** - Creates the plan this skill executes
-- **gremlins:requesting-code-review** - Code review template for reviewer subagents
-- **gremlins:finishing-a-development-branch** - Complete development after all tasks
+- **writing-plans** - Creates the plan this skill executes
+- **requesting-code-review** - Code review template for reviewer subagents
+- **finishing-a-development-branch** - Complete development after all tasks
 
 **Subagents should use:**
-- **gremlins:test-driven-development** - Subagents follow TDD for each task
+- **test-driven-development** - Subagents follow TDD for each task
 
 **Alternative workflow:**
-- **gremlins:executing-plans** - Use for parallel session instead of same-session execution
+- **executing-plans** - Use for parallel session instead of same-session execution

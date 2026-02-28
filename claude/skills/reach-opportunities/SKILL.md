@@ -132,12 +132,11 @@ If bigger → recommend spinning off to new plan.
 ## Integration
 
 **Invoked by:**
-- **gremlins:worktree-workflow** (reach phase) - Opt-in after audit passes
-- Standalone after any implementation
+- Standalone after any implementation passes review
 
 **Follows:**
-- **gremlins:implementation-review** - Only run after audit passes
+- **implementation-review** - Only run after audit passes
 
 **Leads to:**
-- Back to **gremlins:implementation-review** - After implementing selected items
-- **gremlins:finishing-a-development-branch** - When declining all opportunities
+- Back to **implementation-review** - After implementing selected items
+- **finishing-a-development-branch** - When declining all opportunities

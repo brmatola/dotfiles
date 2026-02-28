@@ -35,7 +35,7 @@ Create multiple focused files that cross-reference each other (e.g., `phase-1.md
 ```markdown
 # [Phase/Component Name] Implementation
 
-> **For Claude:** REQUIRED SUB-SKILL: Use gremlins:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -95,7 +95,7 @@ git commit -m "feat: add specific feature"
 - Exact file paths always
 - Complete code in plan (not "add validation")
 - Exact commands with expected output
-- Reference relevant skills with gremlins: prefix
+- Reference relevant skills by name
 - DRY, YAGNI, TDD, frequent commits
 
 ## Trellis Plan Contracts (Conditional)
@@ -184,10 +184,10 @@ After saving the plan, offer execution choice:
 **Which approach?"**
 
 **If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use gremlins:subagent-driven-development
+- **REQUIRED SUB-SKILL:** Use subagent-driven-development
 - Stay in this session
 - Fresh subagent per task + code review
 
 **If Parallel Session chosen:**
 - Guide them to open new session in worktree
-- **REQUIRED SUB-SKILL:** New session uses gremlins:executing-plans
+- **REQUIRED SUB-SKILL:** New session uses executing-plans

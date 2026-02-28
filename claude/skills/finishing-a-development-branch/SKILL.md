@@ -63,41 +63,9 @@ Which option?
 
 **Don't add explanation** - keep options concise.
 
-### Step 4: Check Environment and Execute
+### Step 4: Execute Choice
 
-**First, check if in Emacs-managed worktree:**
-
-```bash
-REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || echo unknown)")
-BRANCH=$(git branch --show-current)
-METADATA="$HOME/worktrees/metadata/$REPO/$BRANCH.json"
-```
-
-#### If in Emacs-managed worktree (metadata file exists)
-
-Report readiness and hand off to Emacs:
-
-```
-Branch ready for integration.
-
-Tests: passing
-Base: <base-branch>
-Ahead: <N> commits
-Conflicts: none detected
-
-Use SPC C x in Emacs to complete:
-- [m] Merge & cleanup
-- [p] Push & create PR
-- [d] Discard
-
-Branch is prepared. Awaiting your choice in Emacs.
-```
-
-**Stop here.** Do not execute merge/push/delete in Emacs-managed worktrees.
-
-#### If NOT in Emacs worktree (no metadata file)
-
-Execute the user's choice directly:
+Execute the user's choice:
 
 **Option 1: Merge Locally**
 
@@ -209,5 +177,5 @@ git worktree remove <worktree-path>
 ## Integration
 
 **Called by:**
-- **gremlins:subagent-driven-development** (Step 7) - After all tasks complete
-- **gremlins:executing-plans** (Step 5) - After all batches complete
+- **subagent-driven-development** (Step 7) - After all tasks complete
+- **executing-plans** (Step 5) - After all batches complete

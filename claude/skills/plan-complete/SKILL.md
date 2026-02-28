@@ -85,8 +85,8 @@ Location: plans/complete/{plan-name}/
 ## When NOT to Use
 
 - Work is still in progress
-- Plan was abandoned (use `gremlins:plan-archive` instead)
-- Plan is obsolete or superseded (use `gremlins:plan-archive` instead)
+- Plan was abandoned (use `plan-archive` instead)
+- Plan is obsolete or superseded (use `plan-archive` instead)
 
 ## Common Mistakes
 

@@ -101,9 +101,8 @@ Output this format:
 ## Integration
 
 **Invoked by:**
-- **gremlins:worktree-workflow** (start phase) - First gate in workflow
 - Standalone when reviewing any plan
 
 **Pairs with:**
-- **gremlins:writing-plans** - Reviews output of that skill
-- **gremlins:executing-plans** - Feeds into that skill when READY
+- **writing-plans** - Reviews output of that skill
+- **executing-plans** - Feeds into that skill when READY

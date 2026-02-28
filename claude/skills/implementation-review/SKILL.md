@@ -141,15 +141,14 @@ Output this format:
 ## Integration
 
 **Invoked by:**
-- **gremlins:worktree-workflow** (audit phase) - Post-implementation gate
 - Standalone for any implementation review
 
 **Follows:**
-- **gremlins:executing-plans** - Reviews output of implementation
+- **executing-plans** - Reviews output of implementation
 
 **Leads to:**
-- **gremlins:finishing-a-development-branch** - When MERGE READY
-- **gremlins:reach-opportunities** - When user opts in after passing
+- **finishing-a-development-branch** - When MERGE READY
+- **reach-opportunities** - When user opts in after passing
 
 **vs verification-before-completion:**
 - Use **implementation-review** as the workflow gate (comprehensive, plan-aware)

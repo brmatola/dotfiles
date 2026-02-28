@@ -1,5 +1,5 @@
 ---
-name: using-gremlins
+name: skill-discipline
 description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
 ---
 
@@ -17,7 +17,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 **In other environments:** Check your platform's documentation for how skills are loaded.
 
-# Using Gremlins
+# Skill Discipline
 
 ## The Rule
 
@@ -45,28 +45,34 @@ digraph skill_flow {
 }
 ```
 
-## Available Gremlins
+## Available Skills
 
 | Skill | When to Use |
 |-------|-------------|
-| `gremlins:brainstorming` | New features, designs, exploring ideas |
-| `gremlins:writing-plans` | Creating implementation plans from specs |
-| `gremlins:executing-plans` | Working through an implementation plan |
-| `gremlins:plan-complete` | Moving a finished plan to complete/ |
-| `gremlins:plan-archive` | Archiving abandoned or obsolete plans |
-| `gremlins:plan-readiness-review` | Pre-implementation plan verification |
-| `gremlins:implementation-review` | Post-implementation audit before merge |
-| `gremlins:reach-opportunities` | Quick wins after implementation passes |
-| `gremlins:worktree-workflow` | Full development loop orchestration |
-| `gremlins:systematic-debugging` | Any bug, error, or unexpected behavior |
-| `gremlins:test-driven-development` | Writing new functionality |
-| `gremlins:verification-before-completion` | Before claiming work is done |
-| `gremlins:requesting-code-review` | Before creating PRs |
-| `gremlins:receiving-code-review` | After getting review feedback |
-| `gremlins:subagent-driven-development` | Executing plans with subagents |
-| `gremlins:dispatching-parallel-agents` | Independent parallel tasks |
-| `gremlins:finishing-a-development-branch` | Completing branch work (PR/merge) |
-| `gremlins:writing-skills` | Creating new skills |
+| `brainstorming` | New features, designs, exploring ideas |
+| `writing-plans` | Creating implementation plans from specs |
+| `executing-plans` | Working through an implementation plan |
+| `plan-complete` | Moving a finished plan to complete/ |
+| `plan-archive` | Archiving abandoned or obsolete plans |
+| `plan-readiness-review` | Pre-implementation plan verification |
+| `plan-review` | Post-implementation plan-level review |
+| `chunk-readiness-review` | Pressure-test trellis chunks before implementation |
+| `implementation-review` | Post-implementation audit before merge |
+| `reach-opportunities` | Quick wins after implementation passes |
+| `systematic-debugging` | Any bug, error, or unexpected behavior |
+| `test-driven-development` | Writing new functionality |
+| `verification-before-completion` | Before claiming work is done |
+| `requesting-code-review` | Before creating PRs |
+| `receiving-code-review` | After getting review feedback |
+| `subagent-driven-development` | Executing plans with subagents |
+| `dispatching-parallel-agents` | Independent parallel tasks |
+| `finishing-a-development-branch` | Completing branch work (PR/merge) |
+| `writing-skills` | Creating new skills |
+| `writing-claude-md-files` | Creating or updating CLAUDE.md files |
+| `maintaining-project-context` | Updating CLAUDE.md after development phases |
+| `investigating-a-codebase` | Understanding codebase before design |
+| `researching-on-the-internet` | Finding current API docs, library patterns |
+| `sap-review` | Reviewing Claude Code usage analytics |
 
 ## Red Flags
 
@@ -107,7 +113,7 @@ The skill itself tells you which.
 
 ## Plan Structure
 
-Gremlins uses a folder-based plan structure:
+Plans use a folder-based structure:
 
 ```
 plans/
@@ -119,7 +125,7 @@ plans/
 └── archive/          # Abandoned or obsolete plans
 ```
 
-Use `gremlins:plan-complete` and `gremlins:plan-archive` to manage lifecycle.
+Use `plan-complete` and `plan-archive` to manage lifecycle.
 
 ## User Instructions
 
