@@ -5,6 +5,7 @@
     "allowUnsandboxedCommands": false,
     "excludedCommands": ["docker"],
     "filesystem": {
+      "allowRead": ["/Users/bmatola/.colima/"],
       "allowWrite": ["//tmp", "~/.npm", "~/.cache", "~/.config", "~/.local/share/pnpm", "~/.pnpm-store", "~/.grove", "./node_modules"]
     },
     "network": {
@@ -16,9 +17,17 @@
         "registry.yarnpkg.com",
         "api.anthropic.com",
         "statsig.anthropic.com",
-        "sentry.io"
+        "sentry.io",
+        "localhost",
+        "registry.k8s.io",
+        "*.registry.k8s.io",
+        "docker.io",
+        "*.docker.io",
+        "ghcr.io",
+        "*.ghcr.io"
       ],
-      "allowLocalBinding": true
+      "allowLocalBinding": true,
+      "allowLocalhost": true
     }
   },
   "permissions": {
