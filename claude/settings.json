@@ -1,4 +1,26 @@
 {
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker"],
+    "filesystem": {
+      "allowWrite": ["//tmp", "~/.npm", "~/.cache", "~/.config"]
+    },
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "*.npmjs.org",
+        "registry.npmjs.org",
+        "registry.yarnpkg.com",
+        "api.anthropic.com",
+        "statsig.anthropic.com",
+        "sentry.io"
+      ],
+      "allowLocalBinding": true
+    }
+  },
   "permissions": {
     "allow": [
       "Read",
