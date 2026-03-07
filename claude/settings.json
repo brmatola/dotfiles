@@ -3,10 +3,10 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
-    "excludedCommands": ["docker"],
+    "excludedCommands": [],
     "filesystem": {
       "allowRead": ["/Users/bmatola/.colima/"],
-      "allowWrite": ["//tmp", "~/.npm", "~/.cache", "~/.config", "~/.local/share/pnpm", "~/.pnpm-store", "~/.grove", "./node_modules"]
+      "allowWrite": ["//tmp", "~/.npm", "~/.cache", "~/.config", "~/.local/share/pnpm", "~/.pnpm-store", "~/.grove", "./node_modules", "/Users/bmatola/.colima/"]
     },
     "network": {
       "allowedDomains": [
