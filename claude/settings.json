@@ -2,8 +2,8 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
-    "allowUnsandboxedCommands": false,
-    "excludedCommands": [],
+    "allowUnsandboxedCommands": true,
+    "excludedCommands": ["npx playwright"],
     "filesystem": {
       "allowRead": ["/Users/bmatola/.colima/"],
       "allowWrite": ["/tmp", "/private/var/folders/", "~/.npm", "~/.cache", "~/.config", "~/.local/share/pnpm", "~/.pnpm-store", "~/.grove", "./node_modules", "/Users/bmatola/.colima/"]
