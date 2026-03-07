@@ -5,7 +5,7 @@
     "allowUnsandboxedCommands": false,
     "excludedCommands": ["docker"],
     "filesystem": {
-      "allowWrite": ["//tmp", "~/.npm", "~/.cache", "~/.config", "~/.local/share/pnpm", "~/.pnpm-store", "./node_modules"]
+      "allowWrite": ["//tmp", "~/.npm", "~/.cache", "~/.config", "~/.local/share/pnpm", "~/.pnpm-store", "~/.grove", "./node_modules"]
     },
     "network": {
       "allowedDomains": [
