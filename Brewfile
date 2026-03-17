@@ -17,6 +17,8 @@ brew "wget"
 brew "go"
 brew "nvm"
 brew "pipx"
+brew "rustup-init"
+brew "terraform"
 
 # Cloud
 brew "awscli"

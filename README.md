@@ -5,19 +5,21 @@ Personal configuration for macOS development environment.
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/dotfiles.git ~/dotfiles
+git clone https://github.com/brmatola/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 ./install.sh
 ```
 
 ## What's Included
 
-- **zsh** - Shell configuration
-- **git** - Git config
-- **emacs/doom** - Doom Emacs config
-- **claude** - Claude Code settings and instructions
-- **Brewfile** - Homebrew packages
+- **zsh** - Shell configuration (zshenv, zprofile, zshrc)
+- **git** - Git config with conditional identity for twiglylabs
+- **claude** - Claude Code settings, skills, agents, and commands
+- **vscode** - VS Code settings, keybindings, and extensions
+- **Brewfile** - All Homebrew packages (formulae and casks)
 - **macos/** - macOS system preferences
+- **dock/** - Dock layout via dockutil
+- **k8s/** - Local Kubernetes (Colima + Kind + registry)
 
 ## Structure
 
@@ -25,22 +27,34 @@ cd ~/dotfiles
 dotfiles/
 ├── install.sh          # Main installer
 ├── Brewfile            # Homebrew packages
+├── npm-globals.txt     # Global npm packages
 ├── macos/
-│   └── defaults.sh     # macOS preferences
+│   ├── defaults.sh     # macOS preferences
+│   └── widgets.md      # Widget layout (manual)
+├── dock/
+│   └── setup.sh        # Dock layout
 ├── zsh/
-│   ├── zshrc
-│   ├── zprofile
-│   └── zshenv
+│   ├── zshenv          # EDITOR/VISUAL
+│   ├── zprofile         # Homebrew, PATH
+│   └── zshrc           # nvm, completions
 ├── git/
-│   └── gitconfig
-├── emacs/
-│   └── doom/
-│       ├── config.el
-│       ├── init.el
-│       └── packages.el
+│   ├── gitconfig
+│   └── gitconfig-twiglylabs
+├── k8s/
+│   ├── setup.sh        # Colima + Kind + registry
+│   ├── colima.yaml
+│   └── kind-cluster.yaml
+├── vscode/
+│   ├── settings.json
+│   ├── keybindings.json
+│   └── extensions.txt
 └── claude/
     ├── CLAUDE.md
-    └── settings.json
+    ├── settings.json
+    ├── keybindings.json
+    ├── skills/
+    ├── agents/
+    └── commands/
 ```
 
 ## Updating

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+trap 'echo "ERROR: Script failed at line $LINENO" >&2' ERR
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "Installing dotfiles from: $DOTFILES_DIR"
@@ -69,6 +70,7 @@ create_symlink "$DOTFILES_DIR/git/gitconfig-twiglylabs" "$HOME/.gitconfig-twigly
 mkdir -p "$HOME/.claude"
 create_symlink "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 create_symlink "$DOTFILES_DIR/claude/settings.json" "$HOME/.claude/settings.json"
+create_symlink "$DOTFILES_DIR/claude/keybindings.json" "$HOME/.claude/keybindings.json"
 # Only link skills if directory has content
 if [ -d "$DOTFILES_DIR/claude/skills" ] && [ "$(ls -A "$DOTFILES_DIR/claude/skills" 2>/dev/null)" ]; then
     create_symlink "$DOTFILES_DIR/claude/skills" "$HOME/.claude/skills"
@@ -89,28 +91,25 @@ create_symlink "$DOTFILES_DIR/vscode/settings.json" "$VSCODE_USER_DIR/settings.j
 create_symlink "$DOTFILES_DIR/vscode/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
 
 ###############################################################################
-# Claude Code CLI                                                             #
+# Git LFS                                                                     #
 ###############################################################################
 
-if ! command -v claude &>/dev/null; then
-    echo ""
-    echo "Installing Claude Code CLI..."
-    npm install -g @anthropic-ai/claude-code
+echo ""
+echo "Setting up Git LFS..."
+git lfs install
+
+###############################################################################
+# Rust (rustup)                                                               #
+###############################################################################
+
+if ! command -v rustup &>/dev/null; then
+    if command -v rustup-init &>/dev/null; then
+        echo ""
+        echo "Installing Rust toolchain..."
+        rustup-init -y --no-modify-path
+    fi
 else
-    echo "Claude Code CLI already installed: $(claude --version 2>/dev/null || echo 'installed')"
-fi
-
-###############################################################################
-# VS Code Extensions                                                          #
-###############################################################################
-
-if command -v code &>/dev/null && [ -f "$DOTFILES_DIR/vscode/extensions.txt" ]; then
-    echo ""
-    echo "Installing VS Code extensions..."
-    while IFS= read -r ext; do
-        [ -z "$ext" ] && continue
-        code --install-extension "$ext" --force 2>/dev/null || echo "  Failed: $ext"
-    done < "$DOTFILES_DIR/vscode/extensions.txt"
+    echo "Rust toolchain already installed: $(rustc --version 2>/dev/null || echo 'installed')"
 fi
 
 ###############################################################################
@@ -145,6 +144,36 @@ if command -v npm &>/dev/null && [ -f "$DOTFILES_DIR/npm-globals.txt" ]; then
             echo "  Already installed: $pkg"
         fi
     done < "$DOTFILES_DIR/npm-globals.txt"
+fi
+
+###############################################################################
+# Claude Code CLI                                                             #
+###############################################################################
+
+if ! command -v claude &>/dev/null; then
+    if command -v npm &>/dev/null; then
+        echo ""
+        echo "Installing Claude Code CLI..."
+        npm install -g @anthropic-ai/claude-code
+    else
+        echo "WARNING: npm not available, skipping Claude Code CLI install"
+    fi
+else
+    echo "Claude Code CLI already installed: $(claude --version 2>/dev/null || echo 'installed')"
+fi
+
+###############################################################################
+# VS Code Extensions                                                          #
+###############################################################################
+
+hash -r  # Refresh command cache after brew installs
+if command -v code &>/dev/null && [ -f "$DOTFILES_DIR/vscode/extensions.txt" ]; then
+    echo ""
+    echo "Installing VS Code extensions..."
+    while IFS= read -r ext; do
+        [ -z "$ext" ] && continue
+        code --install-extension "$ext" --force 2>/dev/null || echo "  Failed: $ext"
+    done < "$DOTFILES_DIR/vscode/extensions.txt"
 fi
 
 ###############################################################################
@@ -210,14 +239,12 @@ echo "2. AWS Credentials"
 echo "   - Copy ~/.aws from old machine, OR"
 echo "   - Run: aws configure"
 echo ""
-echo "3. Git LFS"
-echo "   - Run: git lfs install"
-echo ""
-echo "4. Claude Code Login"
+echo "3. Claude Code Login"
 echo "   - Run: claude login"
 echo ""
-echo "5. Mac App Store"
+echo ""
+echo "4. Mac App Store"
 echo "   - Sign in to the App Store to install mas-managed apps"
 echo ""
-echo "6. Restart your terminal to apply shell changes"
+echo "5. Restart your terminal to apply shell changes"
 echo ""

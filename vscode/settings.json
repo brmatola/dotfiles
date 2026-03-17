@@ -6,7 +6,7 @@
     "[terraform]": {
         "editor.defaultFormatter": "hashicorp.terraform"
     },
-    "redhat.telemetry.enabled": true,
+    "redhat.telemetry.enabled": false,
     "typescript.preferences.quoteStyle": "double",
     "terminal.integrated.allowedLinkSchemes": [
         "file",
@@ -15,7 +15,7 @@
         "mailto",
         "vscode",
         "vscode-insiders",
-        "docker-desktop"
+        "docker"
     ],
     "javascript.updateImportsOnFileMove.enabled": "always",
     "terminal.integrated.enableMultiLinePasteWarning": false,

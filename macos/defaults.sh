@@ -6,7 +6,7 @@
 echo "Configuring macOS defaults..."
 
 # Close System Preferences to prevent overriding changes
-osascript -e 'tell application "System Preferences" to quit' 2>/dev/null
+osascript -e 'tell application "System Settings" to quit' 2>/dev/null
 
 ###############################################################################
 # Keyboard                                                                    #

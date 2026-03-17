@@ -3,14 +3,12 @@ brmatola.claudex
 catppuccin.catppuccin-vsc
 charliermarsh.ruff
 dbaeumer.vscode-eslint
-docker.docker
 esbenp.prettier-vscode
 firsttris.vscode-jest-runner
 github.vscode-github-actions
 golang.go
 graphql.vscode-graphql-syntax
 hashicorp.terraform
-ms-azuretools.vscode-containers
 ms-azuretools.vscode-docker
 ms-playwright.playwright
 ms-python.debugpy
