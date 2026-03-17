@@ -3,6 +3,7 @@ tap "homebrew/bundle"
 
 # Core CLI
 brew "coreutils"
+brew "dockutil"
 brew "fd"
 brew "git"
 brew "git-lfs"
@@ -14,7 +15,7 @@ brew "wget"
 
 # Languages & Runtimes
 brew "go"
-brew "node"
+brew "nvm"
 brew "pipx"
 
 # Cloud
@@ -34,7 +35,6 @@ brew "ollama"
 
 # Applications - Development
 cask "visual-studio-code"
-cask "bruno"
 cask "lm-studio"
 
 # Applications - Productivity
@@ -44,7 +44,6 @@ cask "notion"
 cask "slack"
 cask "google-chrome"
 cask "zoom"
-cask "whatsapp"
 
 # Applications - Gaming
 cask "steam"

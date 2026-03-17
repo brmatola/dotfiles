@@ -1,0 +1,13 @@
+@executeautomation/database-server
+@fission-ai/openspec
+aws-cdk
+aws-cdk-local
+eas-cli
+gatsby-cli
+mcp-obsidian
+npm-check-updates
+nswag
+nx
+pnpm
+typescript
+verdaccio

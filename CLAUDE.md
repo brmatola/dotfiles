@@ -13,8 +13,9 @@ This repository is the **single source of truth** for my computer configuration.
 ## Commands
 
 ```bash
-./install.sh              # Full setup: brew, symlinks
+./install.sh              # Full setup: brew, symlinks, extensions, dock
 brew bundle dump --file=Brewfile --force  # Capture new brew packages
+code --list-extensions > vscode/extensions.txt  # Snapshot VS Code extensions
 ```
 
 ## Structure
@@ -24,6 +25,8 @@ brew bundle dump --file=Brewfile --force  # Capture new brew packages
 | `zsh/` | `~/.zshrc`, `~/.zprofile`, `~/.zshenv` | Shell config |
 | `git/` | `~/.gitconfig` | Git config |
 | `claude/` | `~/.claude/` | Claude Code settings & instructions |
+| `vscode/` | `~/Library/Application Support/Code/User/` | VS Code settings + keybindings |
+| `dock/` | (not symlinked) | Dock layout script (dockutil) |
 | `k8s/` | (not symlinked) | Local K8s setup (Colima + Kind) |
 | `macos/` | (not symlinked) | macOS defaults scripts |
 | `plans/` | (not symlinked) | Implementation plans |
@@ -46,6 +49,8 @@ brew bundle dump --file=Brewfile --force  # Capture new brew packages
 
 - `install.sh` - The installer; also documents what gets symlinked where
 - `Brewfile` - All Homebrew packages (formulae and casks)
+- `npm-globals.txt` - Global npm packages to install
+- `vscode/extensions.txt` - VS Code extensions snapshot (re-dump after adding new ones)
 - `claude/CLAUDE.md` - My global Claude instructions (becomes `~/.claude/CLAUDE.md`)
 
 ## Boundaries

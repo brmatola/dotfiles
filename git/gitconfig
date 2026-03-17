@@ -1,6 +1,4 @@
-# This is Git's per-user configuration file.
 [user]
-# Please adapt and uncomment the following lines:
 	name = Bradley Matola
 	email = brmatola@gmail.com
 [init]
@@ -14,3 +12,13 @@
 	autoSetupRemote = true
 [core]
 	editor = code --wait
+[credential "https://github.com"]
+	helper =
+	helper = !/opt/homebrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !/opt/homebrew/bin/gh auth git-credential
+
+# Identity for twiglylabs repos
+[includeIf "gitdir:~/repos/twiglylabs/"]
+	path = ~/.gitconfig-twiglylabs

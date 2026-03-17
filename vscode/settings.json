@@ -1,0 +1,26 @@
+{
+    "workbench.colorTheme": "Catppuccin Macchiato",
+    "explorer.confirmDragAndDrop": false,
+    "explorer.confirmDelete": false,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "hashicorp.terraform",
+    "redhat.telemetry.enabled": true,
+    "typescript.preferences.quoteStyle": "double",
+    "terminal.integrated.allowedLinkSchemes": [
+        "file",
+        "http",
+        "https",
+        "mailto",
+        "vscode",
+        "vscode-insiders",
+        "docker-desktop"
+    ],
+    "javascript.updateImportsOnFileMove.enabled": "always",
+    "terminal.integrated.enableMultiLinePasteWarning": false,
+    "python.createEnvironment.trigger": "off",
+    "workbench.startupEditor": "none",
+    "docker.extension.enableComposeLanguageServer": false,
+    "security.workspace.trust.untrustedFiles": "open",
+    "makefile.configureOnOpen": false,
+    "window.confirmSaveUntitledWorkspace": false
+}

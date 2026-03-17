@@ -63,6 +63,7 @@ create_symlink "$DOTFILES_DIR/zsh/zshenv" "$HOME/.zshenv"
 
 # Git
 create_symlink "$DOTFILES_DIR/git/gitconfig" "$HOME/.gitconfig"
+create_symlink "$DOTFILES_DIR/git/gitconfig-twiglylabs" "$HOME/.gitconfig-twiglylabs"
 
 # Claude
 mkdir -p "$HOME/.claude"
@@ -81,6 +82,12 @@ if [ -d "$DOTFILES_DIR/claude/commands" ] && [ "$(ls -A "$DOTFILES_DIR/claude/co
     create_symlink "$DOTFILES_DIR/claude/commands" "$HOME/.claude/commands"
 fi
 
+# VS Code
+VSCODE_USER_DIR="$HOME/Library/Application Support/Code/User"
+mkdir -p "$VSCODE_USER_DIR"
+create_symlink "$DOTFILES_DIR/vscode/settings.json" "$VSCODE_USER_DIR/settings.json"
+create_symlink "$DOTFILES_DIR/vscode/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
+
 ###############################################################################
 # Claude Code CLI                                                             #
 ###############################################################################
@@ -91,6 +98,53 @@ if ! command -v claude &>/dev/null; then
     npm install -g @anthropic-ai/claude-code
 else
     echo "Claude Code CLI already installed: $(claude --version 2>/dev/null || echo 'installed')"
+fi
+
+###############################################################################
+# VS Code Extensions                                                          #
+###############################################################################
+
+if command -v code &>/dev/null && [ -f "$DOTFILES_DIR/vscode/extensions.txt" ]; then
+    echo ""
+    echo "Installing VS Code extensions..."
+    while IFS= read -r ext; do
+        [ -z "$ext" ] && continue
+        code --install-extension "$ext" --force 2>/dev/null || echo "  Failed: $ext"
+    done < "$DOTFILES_DIR/vscode/extensions.txt"
+fi
+
+###############################################################################
+# nvm + Node                                                                  #
+###############################################################################
+
+export NVM_DIR="$HOME/.nvm"
+if [ -s "/opt/homebrew/opt/nvm/nvm.sh" ]; then
+    echo ""
+    echo "Setting up nvm..."
+    \. "/opt/homebrew/opt/nvm/nvm.sh"
+    if ! nvm ls --no-colors 2>/dev/null | grep -q "lts"; then
+        echo "Installing latest Node LTS..."
+        nvm install --lts
+    fi
+    nvm alias default lts/*
+fi
+
+###############################################################################
+# Global npm packages                                                         #
+###############################################################################
+
+if command -v npm &>/dev/null && [ -f "$DOTFILES_DIR/npm-globals.txt" ]; then
+    echo ""
+    echo "Installing global npm packages..."
+    while IFS= read -r pkg; do
+        [ -z "$pkg" ] && continue
+        if ! npm list -g "$pkg" &>/dev/null; then
+            echo "  Installing $pkg..."
+            npm install -g "$pkg" || echo "  Failed: $pkg"
+        else
+            echo "  Already installed: $pkg"
+        fi
+    done < "$DOTFILES_DIR/npm-globals.txt"
 fi
 
 ###############################################################################
@@ -122,6 +176,17 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 ###############################################################################
+# Dock Layout                                                                 #
+###############################################################################
+
+echo ""
+read -p "Configure dock layout? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    bash "$DOTFILES_DIR/dock/setup.sh"
+fi
+
+###############################################################################
 # Post-install Reminders                                                      #
 ###############################################################################
 
@@ -132,10 +197,11 @@ echo "=========================================="
 echo ""
 echo "Manual steps to complete:"
 echo ""
-echo "1. SSH Keys"
-echo "   - Copy ~/.ssh from old machine, OR"
-echo "   - Generate new: ssh-keygen -t ed25519 -C \"your@email.com\""
-echo "   - Add to GitHub: https://github.com/settings/keys"
+echo "1. GitHub accounts (personal + twiglylabs)"
+echo "   - gh auth login                          # personal account"
+echo "   - gh auth login                          # twiglylabs account"
+echo "   - gh auth setup-git                      # wire up git credential helper"
+echo "   - gh auth switch --user <name>           # switch active account"
 echo ""
 echo "2. AWS Credentials"
 echo "   - Copy ~/.aws from old machine, OR"
