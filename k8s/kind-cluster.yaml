@@ -1,0 +1,19 @@
+# Kind cluster configuration for twiglylabs-local
+# Used by setup.sh to create the dev cluster
+#
+# Key settings:
+#   - Local registry on localhost:5001 (connected via Docker network, not containerd mirror)
+#   - Port mappings: 80/443 for ingress
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: twiglylabs-local
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP

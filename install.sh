@@ -98,12 +98,12 @@ else
 fi
 
 ###############################################################################
-# Services                                                                    #
+# Local K8s Environment (Colima + Kind + Registry)                            #
 ###############################################################################
 
 echo ""
-echo "Starting background services..."
-brew services start colima
+echo "Setting up local Kubernetes environment..."
+bash "$DOTFILES_DIR/k8s/setup.sh" setup
 
 ###############################################################################
 # Doom Emacs                                                                  #

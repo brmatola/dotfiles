@@ -1,0 +1,46 @@
+# Colima VM configuration
+# Applied by k8s/setup.sh — copied to ~/.colima/default/colima.yaml
+#
+# Resource limits — tune these for your machine:
+#   MacBook Pro M3 Max (36GB): cpu=8, memory=16, disk=120
+#   MacBook Pro M4 Max (64GB): cpu=10, memory=24, disk=120
+
+cpu: 8
+memory: 16
+disk: 120
+rootDisk: 20
+
+arch: aarch64
+runtime: docker
+hostname: colima
+autoActivate: true
+sshConfig: true
+sshPort: 0
+
+kubernetes:
+  enabled: false  # we use Kind, not Colima's built-in k3s
+
+provision:
+  - mode: system
+    script: |
+      # Fix VM-level DNS — Colima inherits macOS DNS which can be unreliable
+      echo "nameserver 8.8.8.8" > /etc/resolv.conf
+      # Raise inotify limits — Kind nodes run systemd which needs many instances
+      sysctl -w fs.inotify.max_user_instances=512
+      sysctl -w fs.inotify.max_user_watches=1048576
+  - mode: ready
+    script: |
+      # Patch Docker daemon config with DNS + ulimits (runs after Docker starts)
+      # Colima writes its own daemon.json at startup, so we merge into it
+      python3 -c "
+      import json
+      with open('/etc/docker/daemon.json') as f:
+          cfg = json.load(f)
+      cfg['dns'] = ['8.8.8.8', '8.8.4.4']
+      cfg['default-ulimits'] = {'nofile': {'Name': 'nofile', 'Hard': 65536, 'Soft': 65536}}
+      with open('/etc/docker/daemon.json', 'w') as f:
+          json.dump(cfg, f, indent=2)
+      " && systemctl restart docker
+
+mounts: []
+env: {}
