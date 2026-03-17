@@ -1,6 +1,3 @@
-# Taps
-tap "homebrew/bundle"
-
 # Core CLI
 brew "coreutils"
 brew "dockutil"
@@ -8,6 +5,7 @@ brew "fd"
 brew "git"
 brew "git-lfs"
 brew "gh"
+brew "jq"
 brew "mas"
 brew "ripgrep"
 brew "shellcheck"
@@ -17,6 +15,7 @@ brew "wget"
 brew "go"
 brew "nvm"
 brew "pipx"
+brew "python@3"
 brew "rustup-init"
 brew "terraform"
 

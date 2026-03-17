@@ -18,21 +18,29 @@ if ! command -v dockutil &>/dev/null; then
     exit 1
 fi
 
+add_to_dock() {
+    if [ -e "$1" ]; then
+        dockutil --add "$1" --no-restart
+    else
+        echo "  Skipping (not installed): $1"
+    fi
+}
+
 echo "Configuring dock layout..."
 
 # Clear everything
-dockutil --remove all --no-restart
+dockutil --remove all --no-restart 2>/dev/null || true
 
 ###############################################################################
 # Daily drivers                                                               #
 ###############################################################################
 
-dockutil --add /Applications/Google\ Chrome.app --no-restart
-dockutil --add /Applications/Slack.app --no-restart
-dockutil --add /System/Applications/Messages.app --no-restart
-dockutil --add /Applications/Notion.app --no-restart
-dockutil --add /Applications/Obsidian.app --no-restart
-dockutil --add /Applications/Things3.app --no-restart
+add_to_dock /Applications/Google\ Chrome.app
+add_to_dock /Applications/Slack.app
+add_to_dock /System/Applications/Messages.app
+add_to_dock /Applications/Notion.app
+add_to_dock /Applications/Obsidian.app
+add_to_dock "/Applications/Things 3.app"
 
 # --- spacer ---
 dockutil --add '' --type small-spacer --section apps --no-restart
@@ -41,10 +49,10 @@ dockutil --add '' --type small-spacer --section apps --no-restart
 # Development                                                                 #
 ###############################################################################
 
-dockutil --add /System/Applications/Utilities/Terminal.app --no-restart
-dockutil --add /Applications/Visual\ Studio\ Code.app --no-restart
-dockutil --add /Applications/Claude.app --no-restart
-dockutil --add /Applications/LM\ Studio.app --no-restart
+add_to_dock /System/Applications/Utilities/Terminal.app
+add_to_dock /Applications/Visual\ Studio\ Code.app
+add_to_dock /Applications/Claude.app
+add_to_dock /Applications/LM\ Studio.app
 
 # --- spacer ---
 dockutil --add '' --type small-spacer --section apps --no-restart
@@ -53,9 +61,9 @@ dockutil --add '' --type small-spacer --section apps --no-restart
 # Gaming & media                                                              #
 ###############################################################################
 
-dockutil --add /Applications/Discord.app --no-restart
-dockutil --add /Applications/Steam.app --no-restart
-dockutil --add /Applications/CrossOver.app --no-restart
+add_to_dock /Applications/Discord.app
+add_to_dock /Applications/Steam.app
+add_to_dock /Applications/CrossOver.app
 
 ###############################################################################
 # Folders (right side, past the divider)                                      #

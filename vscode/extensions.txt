@@ -1,5 +1,4 @@
 anthropic.claude-code
-brmatola.claudex
 catppuccin.catppuccin-vsc
 charliermarsh.ruff
 dbaeumer.vscode-eslint
@@ -25,6 +24,5 @@ ms-vscode.makefile-tools
 orta.vscode-jest
 redhat.vscode-yaml
 rust-lang.rust-analyzer
-swiftlang.swift-vscode
 tamasfe.even-better-toml
 vitest.explorer

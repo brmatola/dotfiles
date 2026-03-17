@@ -1,6 +1,4 @@
 aws-cdk
-mcp-obsidian
 npm-check-updates
 nx
-pnpm
 typescript

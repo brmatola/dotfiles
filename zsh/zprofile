@@ -1,5 +1,15 @@
 # Homebrew
 eval "$(/opt/homebrew/bin/brew shellenv)"
 
+# Rust
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+
+# Go
+export GOPATH="$HOME/go"
+export PATH="$PATH:$GOPATH/bin"
+
 # pipx
 export PATH="$PATH:$HOME/.local/bin"
+
+# VS Code CLI (fallback if shell command not yet installed)
+export PATH="$PATH:/Applications/Visual Studio Code.app/Contents/Resources/app/bin"

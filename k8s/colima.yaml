@@ -4,9 +4,10 @@
 # Resource limits — tune these for your machine:
 #   MacBook Pro M3 Max (36GB): cpu=8, memory=16, disk=120
 #   MacBook Pro M4 Max (64GB): cpu=10, memory=24, disk=120
+#   MacBook Pro M5 Max (128GB): cpu=10, memory=24, disk=120
 
-cpu: 8
-memory: 16
+cpu: 10
+memory: 24
 disk: 120
 rootDisk: 20
 
