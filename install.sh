@@ -152,8 +152,11 @@ fi
 ###############################################################################
 
 echo ""
-echo "Setting up local Kubernetes environment..."
-bash "$DOTFILES_DIR/k8s/setup.sh" setup
+read -p "Set up local Kubernetes environment (Colima + Kind)? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    bash "$DOTFILES_DIR/k8s/setup.sh" setup
+fi
 
 ###############################################################################
 # Ollama                                                                      #
