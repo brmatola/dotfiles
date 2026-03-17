@@ -1,8 +1,2 @@
-export EDITOR="emacsclient"
-export VISUAL="emacsclient"
-
-export PATH="$HOME/.config/emacs/bin:$PATH"
-
-. "$HOME/.cargo/env"
-
-. "/Users/bmatola/.wasmedge/env"
+export EDITOR="code --wait"
+export VISUAL="code --wait"

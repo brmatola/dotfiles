@@ -1,6 +1,6 @@
 # Dotfiles
 
-Last verified: 2026-02-28
+Last verified: 2026-03-16
 
 ## Purpose
 
@@ -24,6 +24,7 @@ brew bundle dump --file=Brewfile --force  # Capture new brew packages
 | `zsh/` | `~/.zshrc`, `~/.zprofile`, `~/.zshenv` | Shell config |
 | `git/` | `~/.gitconfig` | Git config |
 | `claude/` | `~/.claude/` | Claude Code settings & instructions |
+| `k8s/` | (not symlinked) | Local K8s setup (Colima + Kind) |
 | `macos/` | (not symlinked) | macOS defaults scripts |
 | `plans/` | (not symlinked) | Implementation plans |
 

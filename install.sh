@@ -64,10 +64,6 @@ create_symlink "$DOTFILES_DIR/zsh/zshenv" "$HOME/.zshenv"
 # Git
 create_symlink "$DOTFILES_DIR/git/gitconfig" "$HOME/.gitconfig"
 
-# Doom Emacs config
-mkdir -p "$HOME/.config"
-create_symlink "$DOTFILES_DIR/emacs/doom" "$HOME/.config/doom"
-
 # Claude
 mkdir -p "$HOME/.claude"
 create_symlink "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
@@ -106,18 +102,12 @@ echo "Setting up local Kubernetes environment..."
 bash "$DOTFILES_DIR/k8s/setup.sh" setup
 
 ###############################################################################
-# Doom Emacs                                                                  #
+# Ollama                                                                      #
 ###############################################################################
 
-if [ ! -d "$HOME/.config/emacs" ]; then
+if command -v ollama &>/dev/null; then
     echo ""
-    echo "Installing Doom Emacs..."
-    git clone --depth 1 https://github.com/doomemacs/doomemacs "$HOME/.config/emacs"
-    "$HOME/.config/emacs/bin/doom" install
-else
-    echo ""
-    echo "Syncing Doom Emacs..."
-    "$HOME/.config/emacs/bin/doom" sync
+    echo "Ollama installed. Start the service with: brew services start ollama"
 fi
 
 ###############################################################################
@@ -157,5 +147,8 @@ echo ""
 echo "4. Claude Code Login"
 echo "   - Run: claude login"
 echo ""
-echo "5. Restart your terminal to apply shell changes"
+echo "5. Mac App Store"
+echo "   - Sign in to the App Store to install mas-managed apps"
+echo ""
+echo "6. Restart your terminal to apply shell changes"
 echo ""

@@ -1,55 +1,55 @@
 # Taps
 tap "homebrew/bundle"
-tap "cargo-lambda/cargo-lambda"
-tap "d12frosted/emacs-plus"
-tap "localstack/tap"
-tap "wix/brew"
 
-# CLI Tools
-brew "awscli"
-brew "cargo-binstall"
-brew "cargo-lambda/cargo-lambda/cargo-lambda"
-brew "cli53"
-brew "cmake"
-brew "cocoapods"
+# Core CLI
 brew "coreutils"
 brew "fd"
 brew "git"
 brew "git-lfs"
+brew "gh"
+brew "mas"
+brew "ripgrep"
+brew "shellcheck"
+brew "wget"
+
+# Languages & Runtimes
 brew "go"
+brew "node"
+brew "pipx"
+
+# Cloud
+brew "awscli"
+cask "google-cloud-sdk"
+
+# Containers & K8s
 brew "colima"
 brew "docker"
 brew "helm"
-brew "hugo"
-brew "k3d"
 brew "kind"
 brew "kubectl"
-brew "libtool"
-brew "libvterm"
-brew "localstack/tap/localstack-cli"
-brew "mvfst"
-brew "node"
-brew "openjdk@17"
-brew "pandoc"
-brew "pipx"
-brew "poppler"
 brew "qemu"
-brew "ripgrep"
-brew "shellcheck"
-brew "skaffold"
-brew "terraform"
-brew "tmux"
-brew "watchman"
-brew "wget"
-brew "wix/brew/applesimutils"
-brew "yarn"
-brew "gh"
 
-# Applications
-cask "bruno"
-cask "emacs-plus-app"
-cask "google-cloud-sdk"
-cask "kegworks"
-cask "miniconda"
-cask "ngrok"
+# Local LLM
+brew "ollama"
+
+# Applications - Development
 cask "visual-studio-code"
+cask "bruno"
+cask "lm-studio"
+
+# Applications - Productivity
+cask "claude"
+cask "obsidian"
+cask "notion"
+cask "slack"
+cask "google-chrome"
+cask "zoom"
+cask "whatsapp"
+
+# Applications - Gaming
+cask "steam"
+cask "crossover"
+cask "discord"
+
+# Mac App Store
+mas "Things 3", id: 904280696
